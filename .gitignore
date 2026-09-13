@@ -1,0 +1,3 @@
+# Ignore the ArchDoc agents file and directory
+agents/
+AGENTS.md

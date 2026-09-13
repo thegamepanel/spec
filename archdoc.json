@@ -1,0 +1,7 @@
+{
+  "name": "The Game Panel",
+  "branch": "main",
+  "root": ".",
+  "strict": false,
+  "ref_stale_days": 180
+}
