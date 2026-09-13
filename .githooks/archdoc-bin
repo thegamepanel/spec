@@ -1,0 +1,28 @@
+#!/bin/sh
+# Print the path to archdoc, or fail with an explanation.
+#
+# Hooks do not run in an interactive shell, and a GUI client may not run one at
+# all, so PATH here often lacks whatever a shell profile adds. Relying on PATH
+# alone makes the hook work in a terminal and fail everywhere else.
+archdoc_path() {
+    if command -v archdoc >/dev/null 2>&1; then
+        command -v archdoc
+        return 0
+    fi
+    for candidate in \
+        "${GOBIN}/archdoc" \
+        "${GOPATH:-$HOME/go}/bin/archdoc" \
+        /usr/local/bin/archdoc \
+        /opt/homebrew/bin/archdoc
+    do
+        if [ -x "$candidate" ]; then
+            echo "$candidate"
+            return 0
+        fi
+    done
+    echo "archdoc was not found on PATH or in the usual install locations." >&2
+    echo "Install it: https://github.com/ollieread/archdoc" >&2
+    echo "Already installed? A hook does not read your shell profile, so add" >&2
+    echo "its directory to PATH somewhere every shell reads." >&2
+    return 1
+}

@@ -1,0 +1,6 @@
+#!/bin/sh
+# Lint only. INDEX.md is derived and lags normally while you are working; it has
+# to be correct at push time, not at every commit.
+. "$(dirname "$0")/archdoc-bin"
+ARCHDOC=$(archdoc_path) || exit 1
+exec "$ARCHDOC" lint

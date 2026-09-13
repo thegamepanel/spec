@@ -1,0 +1,13 @@
+#!/bin/sh
+# Push freezes every document that has reached a terminal status. After this,
+# L11 forbids the edit that would repair a mistake in one, so this is the last
+# point anything can be fixed.
+set -e
+. "$(dirname "$0")/archdoc-bin"
+ARCHDOC=$(archdoc_path) || exit 1
+"$ARCHDOC" lint
+"$ARCHDOC" index --check || {
+    echo >&2
+    echo "INDEX.md is out of date. Run: archdoc index" >&2
+    exit 1
+}
