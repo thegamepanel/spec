@@ -1,0 +1,70 @@
+name: Publish the site
+
+# Builds the specification into a site and deploys it to GitHub Pages.
+#
+# Pages can build a repository itself, without a workflow, but that build is
+# pinned to Jekyll 3.10, where Liquid runs over every document and raises on
+# any tag it does not recognise. RFC-0011 contains a Twig example using
+# {% slot %}, which is not a Liquid tag, so that build fails. Jekyll 3 offers
+# no way to skip Liquid for a file short of writing {% raw %} into the
+# document, and the documents are the record: they are not changed to suit a
+# renderer.
+#
+# Building here instead pins Jekyll 4, where render_with_liquid can be set for
+# every page at once from _config.yml, so no document carries anything for the
+# site's benefit. The cost is declaring the plugins that the built-in build
+# would have supplied.
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+# contents to read the repository, pages and id-token to deploy to it.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time, and never cancelled: a half-finished deploy would
+# leave the site serving a mixture of two commits.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build the site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+
+      - name: Configure Pages
+        id: pages
+        uses: actions/configure-pages@v5
+
+      # The base path matters because the site is served from a subdirectory,
+      # https://<owner>.github.io/spec/, so every generated link needs it.
+      - name: Build
+        env:
+          JEKYLL_ENV: production
+        run: bundle exec jekyll build --baseurl "${{ steps.pages.outputs.base_path }}"
+
+      - uses: actions/upload-pages-artifact@v3
+
+  deploy:
+    name: Deploy to Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

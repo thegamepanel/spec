@@ -1,16 +1,33 @@
-# GitHub Pages builds this repository with Jekyll, so the specification is
-# readable as a site as well as in the repository.
+# The specification, built into a site by .github/workflows/pages.yml.
 #
-# Nothing here is needed to make the documents work. GitHub Pages enables
-# jekyll-relative-links by default and cannot disable it, so every relative
-# link between documents resolves to its rendered page without any
-# configuration. This file only sets the title and the theme, and keeps the
-# agent guides out of the published site.
+# The workflow exists so that Jekyll 4 can be used. Jekyll runs Liquid over
+# every document before converting it, and does not skip fenced code blocks,
+# so the Twig examples in the documents are read as Liquid tags and fail the
+# build. Jekyll 4 can be told not to do that, for every page at once, which is
+# what the defaults below say. Nothing is written into a document to suit the
+# site.
 
 title: The Game Panel specification
 description: RFCs, ADRs, spec pages and refs for The Game Panel, managed with ArchDoc.
 
 theme: jekyll-theme-primer
+
+# Supplied by GitHub Pages' own build, and declared here because this one is
+# ours. jekyll-relative-links is what turns ../adr/0001-foo.md into a link to
+# the page it becomes, so the documents link each other unchanged.
+plugins:
+  - jekyll-relative-links
+  - jekyll-seo-tag
+  - jekyll-github-metadata
+
+# The documents are the record and carry nothing for the renderer's benefit,
+# so Liquid is turned off for all of them here instead. Layouts still render;
+# this applies only to a page's own content.
+defaults:
+  - scope:
+      path: ""
+    values:
+      render_with_liquid: false
 
 # Instructions for coding agents, not specification. PROCESS.md is published,
 # because it is the authority on how these documents work and a reader of the
