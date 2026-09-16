@@ -19,7 +19,7 @@ The DDL is MySQL's, per [ADR-0007](../adr/0007-mysql-and-mariadb-are-the-default
 | `Create::database(string $database)` | `CREATE DATABASE`. |
 | `Alter::table(string $table)` | `ALTER TABLE`. |
 | `Alter::database(string $database)` | `ALTER DATABASE`. |
-| `Drop::table()`, `database()`, `column()`, `index()`, `primaryKey()`, `foreignKey()` | `DROP` of that kind. |
+| `Drop::table()`, `database()`, `column()`, `index()`, `primaryKey()`, `foreignKey()` | `DROP` of that type. |
 | `Rename::table(string $table, string $newName)` | `RENAME TABLE`. |
 | `Truncate::table(string $table)` | `TRUNCATE TABLE`. |
 
@@ -91,7 +91,7 @@ Dropping the primary key is recorded as a flag, so the name given to `Drop::prim
 `Drop` writes `DROP {type} \`{name}\``, with `TEMPORARY` before the type and `IF EXISTS` after it where each
 applies.
 
-`ifExists()` is valid only on a table or a database, and `temporary()` only on a table. Either used on another kind
+`ifExists()` is valid only on a table or a database, and `temporary()` only on a table. Either used on another type
 throws `InvalidSchemaException`.
 
 A drop of a table or a database is a statement executed on its own. The others are used within `Alter::table()`.
@@ -100,7 +100,7 @@ A drop of a table or a database is a statement executed on its own. The others a
 
 `Column` is a factory, and the method used fixes the column's type.
 
-| Kind | Factories | Sizing |
+| Family | Factories | Sizing |
 |---|---|---|
 | Integer | `tinyInt()`, `smallInt()`, `mediumInt()`, `int()`, `bigInt()` | An optional display length. |
 | Decimal | `decimal()`, `float()`, `double()` | An optional length and number of decimal places. |
@@ -124,9 +124,10 @@ Every column has these modifiers:
 | `generated(Query $query)` | Writes `GENERATED ALWAYS AS ({sql})`. |
 | `virtual()`, `stored()` | Mark a generated column's storage. On a column that is not generated, either throws. |
 
-Some kinds have further modifiers, each throwing `InvalidSchemaException` when used on a type it does not apply to:
+Some families have further modifiers, each throwing `InvalidSchemaException` when used on a column type it does not
+apply to:
 
-| Modifier | Kinds |
+| Modifier | Families |
 |---|---|
 | `unsigned()` | Integer, decimal |
 | `autoIncrement()` | Integer |

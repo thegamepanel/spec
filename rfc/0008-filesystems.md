@@ -25,7 +25,7 @@ Every file the engine reads or writes goes through Flysystem, per
 to use. Configuration loading, the only part of the engine that touches a file, still reads through PHP's functions
 from the paths in `Paths`.
 
-`Paths` also has one root, `cache`, holding two different kinds of thing: compiled templates and module metadata,
+`Paths` also has one root, `cache`, holding two different types of thing: compiled templates and module metadata,
 which PHP includes and opcaches, and content that is merely cached. Only the first needs a real path, and while they
 share a root the rule about where paths survive needs an exception.
 

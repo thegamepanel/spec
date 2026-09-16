@@ -15,7 +15,7 @@ obsoletes: []
 
 Several records the panel keeps are worth reading afterwards. A session record is read to tell one session from
 another: whose it is, when it was last used, and whether it looks like the person whose account it belongs to.
-Tokens and audit records will be read for the same kind of reason. Each would naturally record where the request
+Tokens and audit records will be read for the same reason. Each would naturally record where the request
 came from, and the engine already has one value object for a client address that all three use.
 
 A client address identifies a person, and in several jurisdictions is treated as personal data in its own right.

@@ -5,7 +5,7 @@ status: accepted
 created: 2026-06-01
 decided: 2026-07-04
 backfilled: 2026-09-14
-depends: []
+depends: [ADR-0012]
 updates: [RFC-0004]
 obsoletes: []
 ---
@@ -30,7 +30,7 @@ every location, constructed once during early bootstrap, is cleaner than a paths
 
 | Term | Meaning |
 |---|---|
-| Root | An absolute directory under which the engine keeps one kind of file. |
+| Root | An absolute directory under which the engine keeps one type of file. |
 | Relative path | A path beneath a root, joined onto it by `Paths`. |
 
 ### Components

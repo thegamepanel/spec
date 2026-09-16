@@ -47,7 +47,7 @@ compiler changes what produces it.
 |---|---|
 | `Node` | Marks anything the compiler understands. `Query`, `Schema`, `Column` and `Index` extend it. |
 | `Expression` | Narrowed to a fragment producing a value, such as raw SQL. |
-| `NodeCompiler` | Compiles one kind of node, given the compiler for its children. |
+| `NodeCompiler` | Compiles one type of node, given the compiler for its children. |
 | `Compiler`, `CompilerRegistry`, `CompilerCatalogue` | Dispatch to a node's compiler, collected and then sealed. |
 | `CompiledSql` | SQL and bound values, composed together as fragments combine. |
 | `Identifier` | Quotes and escapes a name, qualified or wildcard. |

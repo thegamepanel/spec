@@ -50,7 +50,7 @@ visible without a rebuild.
 | Registrar | A module's entry class, and the reflected metadata describing which of its methods do what. |
 | Capability | Something a module declares it does, checked by whatever enforces it. |
 | Source | Where manifests and registrar metadata come from, compiled or reflected. |
-| Collector | What a component hands to modules to contribute to, for one kind of contribution. |
+| Collector | What a component hands to modules to contribute to, for one type of contribution. |
 | Collection | A component asking every enabled module to contribute, at a moment it chooses. |
 | Panel context | The part of the panel something belongs to: an account, a server or the platform. |
 
