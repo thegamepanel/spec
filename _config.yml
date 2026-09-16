@@ -17,6 +17,8 @@ theme: jekyll-theme-primer
 # the page it becomes, so the documents link each other unchanged.
 plugins:
   - jekyll-relative-links
+  - jekyll-optional-front-matter
+  - jekyll-readme-index
   - jekyll-seo-tag
   - jekyll-github-metadata
 
