@@ -15,6 +15,15 @@ gem "jekyll", "~> 4.4"
 # it; here it has to be asked for.
 gem "jekyll-relative-links", "~> 0.8"
 
+# Jekyll renders a Markdown file as a page only when it has front matter. The
+# documents all have it; README.md, INDEX.md and PROCESS.md do not, and were
+# copied through as files rather than rendered. This renders them.
+gem "jekyll-optional-front-matter", "~> 0.3"
+
+# Makes README.md the index of whichever directory it sits in, so the site
+# root is a page rather than a 404.
+gem "jekyll-readme-index", "~> 0.4"
+
 # The theme, and the two plugins it depends on.
 gem "jekyll-theme-primer", "~> 0.6"
 gem "jekyll-seo-tag", "~> 2.0"
