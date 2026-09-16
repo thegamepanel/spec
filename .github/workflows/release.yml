@@ -8,11 +8,15 @@ name: Release the specification
 # comes only from a commit whose specification passed. There is no way to
 # trigger on success alone: workflow_run fires when that workflow concludes
 # whatever its conclusion, so the job below is gated on the conclusion.
+#
+# It can also be run by hand, to publish a commit whose release is missing or
+# wrong. Nothing has linted that commit on this path, so it lints for itself.
 on:
   workflow_run:
     workflows: [archdoc lint]
     types: [completed]
     branches: [main]
+  workflow_dispatch:
 
 # Unlike the lint workflow, this one writes: it creates a release.
 permissions:
@@ -29,8 +33,10 @@ jobs:
   release:
     name: Publish the export
     runs-on: ubuntu-latest
-    # Nothing is published from a specification that did not pass.
-    if: github.event.workflow_run.conclusion == 'success'
+    # Nothing is published from a specification that did not pass. A manual run
+    # carries no workflow_run payload, so its conclusion is empty and it is
+    # admitted here, then linted as a step of its own below.
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     steps:
       # A workflow_run job checks out the default branch, not the commit that
       # triggered it, so the commit is named explicitly. Without this, a later
@@ -43,7 +49,7 @@ jobs:
       # the export ever derives anything from git.
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: 0
 
       # Pinned, and raised together with the pin in archdoc-lint.yml. The two
@@ -82,6 +88,15 @@ jobs:
           cd - >/dev/null
           rm -rf "$tmp"
 
+      # Only on a manual run. The chained path is already gated on the lint
+      # workflow having passed for this commit, and repeating it there would
+      # put the checks in two places to drift apart.
+      - name: Lint
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          archdoc lint
+          archdoc index --check
+
       - name: Name the release
         id: name
         run: |
@@ -93,8 +108,13 @@ jobs:
           # Read from the checkout rather than from the event, so the tag names
           # the commit that is actually being exported.
           tag="$(git show -s --format=%cs HEAD)-$(git rev-parse --short HEAD)"
-          echo "tag=$tag"             >> "$GITHUB_OUTPUT"
-          echo "asset=spec-$tag.zip"  >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          # The asset is named the same in every release, so that
+          # releases/latest/download/spec.zip is a stable address for whatever
+          # the specification currently is. That endpoint resolves by asset
+          # name, so a name carrying the tag would have no such address. The
+          # tag is what tells one release from another.
+          echo "asset=spec.zip" >> "$GITHUB_OUTPUT"
 
       - name: Export the specification
         run: |
