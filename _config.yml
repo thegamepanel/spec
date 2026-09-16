@@ -10,6 +10,11 @@
 title: The Game Panel specification
 description: RFCs, ADRs, spec pages and refs for The Game Panel, managed with ArchDoc.
 
+# jekyll-github-metadata fills site.github, which the theme's layout reads.
+# Pages' own build is told which repository it is building; this one is not, and
+# the plugin raises rather than leaving the values empty.
+repository: thegamepanel/spec
+
 theme: jekyll-theme-primer
 
 # Supplied by GitHub Pages' own build, and declared here because this one is

@@ -53,6 +53,9 @@ jobs:
       - name: Build
         env:
           JEKYLL_ENV: production
+          # Lets jekyll-github-metadata read the repository through the API
+          # instead of warning that some of site.github may be missing or wrong.
+          JEKYLL_GITHUB_TOKEN: ${{ github.token }}
         run: bundle exec jekyll build --baseurl "${{ steps.pages.outputs.base_path }}"
 
       - uses: actions/upload-pages-artifact@v3
