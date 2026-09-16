@@ -20,9 +20,15 @@ gem "jekyll-relative-links", "~> 0.8"
 # copied through as files rather than rendered. This renders them.
 gem "jekyll-optional-front-matter", "~> 0.3"
 
-# Makes README.md the index of whichever directory it sits in, so the site
-# root is a page rather than a 404.
-gem "jekyll-readme-index", "~> 0.4"
+# Gives a page a layout when it does not name one. ArchDoc's front matter has
+# no layout key, so without this every document renders as a bare fragment
+# with no theme around it.
+gem "jekyll-default-layout", "~> 0.2"
+
+# Takes a page's title from its first heading when it has none. The documents
+# all carry a title in their front matter, but INDEX.md and PROCESS.md have no
+# front matter at all, so without this the front door has a blank title.
+gem "jekyll-titles-from-headings", "~> 0.5"
 
 # The theme, and the two plugins it depends on.
 gem "jekyll-theme-primer", "~> 0.6"
