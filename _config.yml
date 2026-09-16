@@ -18,7 +18,8 @@ theme: jekyll-theme-primer
 plugins:
   - jekyll-relative-links
   - jekyll-optional-front-matter
-  - jekyll-readme-index
+  - jekyll-default-layout
+  - jekyll-titles-from-headings
   - jekyll-seo-tag
   - jekyll-github-metadata
 
@@ -30,6 +31,19 @@ defaults:
       path: ""
     values:
       render_with_liquid: false
+
+  # INDEX.md is the front door, so it is the site's index. A more specific
+  # scope replaces the one above rather than adding to it, so the Liquid
+  # setting is repeated here.
+  #
+  # The permalink is set here rather than in the file because ArchDoc
+  # generates INDEX.md, and anything written into it would be lost the next
+  # time the index is regenerated.
+  - scope:
+      path: "INDEX.md"
+    values:
+      render_with_liquid: false
+      permalink: /
 
 # Instructions for coding agents, not specification. PROCESS.md is published,
 # because it is the authority on how these documents work and a reader of the
