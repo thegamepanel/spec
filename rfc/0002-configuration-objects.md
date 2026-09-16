@@ -5,7 +5,7 @@ status: accepted
 created: 2026-03-25
 decided: 2026-03-29
 backfilled: 2026-09-13
-depends: [ADR-0003, ADR-0005, ADR-0006, RFC-0001]
+depends: [ADR-0005, ADR-0006, RFC-0001]
 updates: []
 obsoletes: []
 ---
@@ -158,7 +158,6 @@ The decisions this design rests on are recorded separately, with the alternative
 - holding configuration in typed objects, in [ADR-0005](../adr/0005-configuration-is-held-in-typed-objects.md)
 - reading environment variables only during bootstrap, in
   [ADR-0006](../adr/0006-environment-variables-are-only-read-during-bootstrap.md)
-- the immutable catalogue, in [ADR-0003](../adr/0003-mutable-registries-are-sealed-into-immutable-catalogues.md)
 
 No other alternatives were weighed.
 
