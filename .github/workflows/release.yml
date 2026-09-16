@@ -1,0 +1,147 @@
+name: Release the specification
+
+# Every push to main publishes the specification as JSON, so that anything
+# rendering or indexing it elsewhere consumes a release asset instead of
+# parsing Markdown out of the repository.
+#
+# Chained to the lint workflow rather than repeating its checks, so a release
+# comes only from a commit whose specification passed. There is no way to
+# trigger on success alone: workflow_run fires when that workflow concludes
+# whatever its conclusion, so the job below is gated on the conclusion.
+on:
+  workflow_run:
+    workflows: [archdoc lint]
+    types: [completed]
+    branches: [main]
+
+# Unlike the lint workflow, this one writes: it creates a release.
+permissions:
+  contents: write
+
+# One at a time, and never cancelled. Two pushes landing together would race to
+# create their tags, and cancelling the earlier one would lose the release for
+# a commit that is already on main.
+concurrency:
+  group: release-the-specification
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Publish the export
+    runs-on: ubuntu-latest
+    # Nothing is published from a specification that did not pass.
+    if: github.event.workflow_run.conclusion == 'success'
+    steps:
+      # A workflow_run job checks out the default branch, not the commit that
+      # triggered it, so the commit is named explicitly. Without this, a later
+      # push could have moved main and the export would come from a commit that
+      # was never linted.
+      #
+      # Export reads the working tree rather than history, so a shallow
+      # checkout would do. The full history is fetched anyway, so that this job
+      # sees the repository exactly as the lint job does and nothing breaks if
+      # the export ever derives anything from git.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      # Pinned, and raised together with the pin in archdoc-lint.yml. The two
+      # must not drift: the version decides the shape of what is generated, and
+      # a mismatch is invisible locally.
+      - name: Install ArchDoc
+        env:
+          ARCHDOC_VERSION: v0.1.0-alpha.5
+        run: |
+          set -euo pipefail
+          if [ "$ARCHDOC_VERSION" = "latest" ]; then
+            base="https://github.com/ollieread/archdoc/releases/latest/download"
+            tag="$(curl -fsSL -o /dev/null -w '%{url_effective}' \
+              https://github.com/ollieread/archdoc/releases/latest | sed 's#.*/tag/##')"
+          else
+            base="https://github.com/ollieread/archdoc/releases/download/$ARCHDOC_VERSION"
+            tag="$ARCHDOC_VERSION"
+          fi
+          archive="archdoc_${tag#v}_linux_amd64.tar.gz"
+
+          # Downloaded outside the checkout. curl -O writes into the working
+          # directory, which is the tree actions/checkout just populated, and it
+          # opens with fopen("wb"), which writes through an existing symlink: a
+          # committed symlink named after the archive would have redirected it.
+          tmp="$(mktemp -d)"
+          cd "$tmp"
+
+          curl -fsSL -O "$base/$archive"
+          curl -fsSL -O "$base/checksums.txt"
+          # The binary is about to run over the repository, so check it is the
+          # one the release published.
+          grep " $archive\$" checksums.txt | sha256sum -c -
+
+          tar -xzf "$archive" archdoc
+          install -m 0755 archdoc /usr/local/bin/archdoc
+          cd - >/dev/null
+          rm -rf "$tmp"
+
+      - name: Name the release
+        id: name
+        run: |
+          set -euo pipefail
+          # The commit's own date, not the day this runs, so re-running the job
+          # produces the same tag rather than a second release under a later
+          # date. Date first, so tags sort chronologically as plain strings.
+          #
+          # Read from the checkout rather than from the event, so the tag names
+          # the commit that is actually being exported.
+          tag="$(git show -s --format=%cs HEAD)-$(git rev-parse --short HEAD)"
+          echo "tag=$tag"             >> "$GITHUB_OUTPUT"
+          echo "asset=spec-$tag.zip"  >> "$GITHUB_OUTPUT"
+
+      - name: Export the specification
+        run: |
+          set -euo pipefail
+          # A tree rather than one document: index.json carrying every document
+          # without bodies, one file per document beside it, and the glossary.
+          # A page rendering one RFC should not have to fetch all of it.
+          archdoc export --out export
+          # The schema travels with the export, so a consumer can validate what
+          # it was handed without knowing which version produced it.
+          archdoc export --schema > export/schema.json
+
+      - name: Build the archive
+        env:
+          ASSET: ${{ steps.name.outputs.asset }}
+        run: |
+          set -euo pipefail
+          # Zipped from inside the directory, so the archive holds adr/, rfc/
+          # and index.json at its root rather than an export/ wrapper.
+          cd export
+          zip -qr "../$ASSET" .
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.name.outputs.tag }}
+          ASSET: ${{ steps.name.outputs.asset }}
+        run: |
+          set -euo pipefail
+          # Read from git rather than from the event payload. A commit message
+          # is untrusted input, and interpolating one into a script is the
+          # standard workflow injection. GITHUB_SHA is wrong here for a second
+          # reason: under workflow_run it names the default branch's head, not
+          # the commit this job checked out.
+          subject="$(git show -s --format=%s HEAD)"
+          sha="$(git rev-parse HEAD)"
+          documents="$(find export/adr export/rfc -name '*.json' 2>/dev/null | wc -l | tr -d ' ')"
+
+          notes="$(printf '%s\n\n%s\n' \
+            "$subject" \
+            "Exported from $sha. $documents documents, with the glossary and the JSON Schema the export conforms to.")"
+
+          # A re-run of a commit that already has its release replaces the
+          # asset. Creating the tag again would fail, and failing a job that has
+          # nothing left to do is noise.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$ASSET" --clobber
+          else
+            gh release create "$TAG" "$ASSET" --title "$TAG" --notes "$notes"
+          fi
