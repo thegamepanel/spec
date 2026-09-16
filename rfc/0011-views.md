@@ -121,10 +121,12 @@ which is what a hypermedia interaction swapping part of a page needs.
 Whether a request wants a page or a block is decided by whatever maps a result onto a response, since that is what
 knows about headers, per [RFC-0010](0010-http-transport.md).
 
-Templates receive read models carrying the fields a page needs, not entities. That is why no sandbox is configured:
-a restriction list would have to forbid a template handed a `Server` from reaching `server.owner.email`, whereas a
-read model means `owner` is not there to reach. There is nothing to permit and nothing to keep in step as entities
-grow.
+Templates receive read models carrying the fields a page needs, not entities, so a template handed a server cannot
+reach `server.owner.email`: `owner` is not there to reach.
+
+Twig's sandbox is configured as well. Read models bound what a template is given; the sandbox bounds what it may do
+with what it is given, and neither substitutes for the other. What a sandbox permits is decided per module rather
+than centrally, since a module knows what its own templates need.
 
 ### Slots
 
@@ -184,7 +186,7 @@ nothing; if more than one ever exists, it is what stops output compiled under on
   registered late.
 - **Design tokens, CSS and asset building.**
 - **Collecting sources or slot definitions from modules**, which is a collector in the module system.
-- **A sandbox**, which read models make unnecessary.
+- **What each module's sandbox permits**, which is decided with the module rather than here.
 - **Branding configuration.**
 - **Hypermedia response headers**, which are headers, set by whatever builds the response.
 
@@ -213,6 +215,9 @@ Nothing breaks. The engine renders no HTML before this.
 
 ## Changelog
 
+- 2026-09-16: A sandbox is configured, with what it permits decided per module. This document previously recorded a
+  sandbox as unnecessary, following [#69].
+
 ## Sources
 
 - Issue [#69], Engine - Views, 2026-08-25, with no edits and no comments: sources as a name plus namespace-to-path
@@ -225,6 +230,9 @@ Nothing breaks. The engine renders no HTML before this.
 - Issue [#71], Engine - Filesystems, 2026-09-03: core templates living with core rather than at a path of their own,
   and compiled output belonging at the `compiled` root because PHP includes it. #69 left where core templates live
   open, and this settles it.
+- A sandbox being configured, and what it permits being decided per module: first written down on 2026-09-16. Issue
+  [#69] states the opposite, that read models make a sandbox unnecessary and that none is configured, and is
+  superseded on this point. Read models remain, for the reason [#69] gives.
 
 [#69]: https://github.com/thegamepanel/panel/issues/69
 [#71]: https://github.com/thegamepanel/panel/issues/71

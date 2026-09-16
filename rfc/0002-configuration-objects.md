@@ -72,10 +72,9 @@ final readonly class MailConfig implements ConfigObject
 
 ### Catalogue
 
-`ConfigCatalogue` is the immutable half of the component, per
-[ADR-0003](../adr/0003-mutable-registries-are-sealed-into-immutable-catalogues.md). It is constructed with every
-configuration object, keyed by module and then by name, and builds a map from each object's class to its module and
-name as it is constructed.
+`ConfigCatalogue` is immutable. It is constructed with every configuration object, keyed by module and then by name,
+and builds a map from each object's class to its module and name as it is constructed. Nothing collects
+registrations: the registry that seals into it arrives with [RFC-0004](0004-toml-configuration-loading.md).
 
 | Method | Effect |
 |---|---|
@@ -186,6 +185,11 @@ Nothing breaks. No configuration component exists before this change.
   three of these: nothing binds configuration objects into the container, `Env::string()` returns the default
   instead of throwing, and nothing confines `Env` to bootstrap. It also defines a
   `MissingEnvVariableException` that is not part of the design.
+- The catalogue being described as immutable rather than as the sealed half of a registry pattern: corrected on
+  2026-09-16. PR [#25]'s commits show the class arrived as a configuration registry and was renamed to a catalogue,
+  and neither a registry nor a seal exists at [180794a]. Both the registry and the pattern in
+  [ADR-0003](../adr/0003-mutable-registries-are-sealed-into-immutable-catalogues.md), decided on 2026-04-22,
+  postdate this design.
 
 [#22]: https://github.com/thegamepanel/panel/issues/22
 [#25]: https://github.com/thegamepanel/panel/pull/25

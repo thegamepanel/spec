@@ -32,7 +32,7 @@ carry values that are read when the dependency is resolved, so they are needed a
 ## Decision
 
 Resolution data is not memoised per parameter. The container keeps nothing about a parameter beyond the resolution
-that reflected on it: no `Dependency`, no attribute instance, and no record of which kind of attribute each attribute
+that reflected on it: no `Dependency`, no attribute instance, and no record of which type of attribute each attribute
 class is. It keeps no resolution plan either, whether held in memory or compiled to a file at build time. Each
 parameter is reflected on when it is supplied, and attribute memoisation stays at class level.
 
@@ -51,10 +51,14 @@ depend on the module scope the resolution runs under, so a cached plan could not
 they are installed. The rest of the panel runs as one long-lived process, so a compiled plan adds more complexity than
 it saves.
 
-**Caching which kind of attribute each attribute class is**, so that a parameter's attributes are read in one pass and
-matched by name. It removes no reflection. `Named` and resolvable attributes need instances, so each parameter's
-attributes are still read through reflection, a marker needs no more than a boolean, and a qualifier only its class.
-What remains is a small saving in reflection calls, with no problem behind it to solve.
+**Caching which type of attribute each attribute class is**, so that a parameter's attributes are read in one pass
+and matched by name. `Named` and resolvable attributes need instances, so each parameter's attributes are still read
+through reflection, a marker needs no more than a boolean, and a qualifier only its class. Little reflection is
+therefore removed, and what remains is a small saving in reflection calls with no problem behind it to solve.
+
+The text this option was weighed in measured it differently, at 5.85 µs of a 9.19 µs call, and preferred it. That
+measurement is not disputed here. The reasoning that prevailed is that instances of some attributes are needed
+either way.
 
 ## Consequences
 
@@ -83,12 +87,13 @@ Constrained:
   handling as the hot path, its measurements, and caching the whole resolution plan suggested as a follow-up.
 - Issue [#70], Engine - Container - Module scopes, 2026-09-03, the first public record of the decision. Its original
   text, replaced three minutes after it was opened and kept in its edit history, weighed caching the resolution plan,
-  each entry pinning a `ReflectionType` and depending on the module scope, against caching which kind of attribute
-  each attribute class is. Its revised text records that `Dependency` is not memoised, so stamping a scope on it costs
+  each entry pinning a `ReflectionType` and depending on the module scope, against caching which type of attribute
+  each attribute class is, which it measured at 5.85 µs of a 9.19 µs call and preferred. Its revised text records that `Dependency` is not memoised, so stamping a scope on it costs
   nothing, taken from what followed rather than anticipated.
 - Compiling the resolution plan to a file at build time being ruled out, and why: first written down on 2026-09-13,
   with no record of when it was weighed.
-- Caching which kind of attribute each attribute class is being rejected, and why: first written down on 2026-09-14.
+- Caching which type of attribute each attribute class is being rejected, and why, against the measurement in that
+  original text: first written down on 2026-09-14.
 - [`src/Container/Dependency.php` at 728ad64](https://github.com/thegamepanel/panel/blob/728ad64/src/Container/Dependency.php):
   a `Dependency` holding the parameter's `ReflectionType` and its `Named`, qualifier and resolvable attribute
   instances.

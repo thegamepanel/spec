@@ -14,8 +14,9 @@ obsoletes: []
 
 ## Context
 
-The engine reads and writes files: configuration, cached content, its own data, and the compiled output that PHP
-includes. Everything that touches a file does so through PHP's own functions and a path taken from `Paths`.
+The engine reads files. Configuration loading is the only thing that touches one today, through PHP's own functions
+and a path taken from `Paths`. More follows as components land: cached content, the engine's own data, and the
+compiled output that PHP includes, which it will write as well as read.
 
 A path only means anything where the files are on local disk. Some of what the engine keeps could sit elsewhere:
 configuration in object storage, or cached content in a database table, where no host path exists. Anything that
@@ -65,7 +66,7 @@ Harder:
 Constrained:
 
 - `league/flysystem` becomes a dependency of the binary, with `league/flysystem-local` and
-  `league/mime-type-detection` behind it, and an adapter for each backend.
+  `league/mime-type-detection` behind it, and an adapter for each backend it uses.
 - Local paths remain in three places only: modules, compiled output and logs.
 - A remote adapter holds a connection, so whatever adds the first one inherits the question of how long a filesystem
   lives.
