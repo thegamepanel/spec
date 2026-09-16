@@ -50,7 +50,7 @@ string or from a builder.
 | Connection | An open connection to one database, identified by name. |
 | Connection name | The name a connection is configured and requested under. |
 | Primary connection | The connection used whenever no connection name is given. |
-| Driver | The kind of database a connection talks to. Only MySQL, including compatible MariaDB, is exposed. |
+| Driver | The type of database a connection talks to. Only MySQL, including compatible MariaDB, is exposed. |
 | Persistent connection | A connection that PDO keeps open and reuses, rather than closing it. |
 | Expression | An object that produces SQL, with a `?` placeholder for each bound value, and the values bound to those placeholders. |
 | Query | An expression that is a complete query, such as a select or an insert, rather than a fragment such as `col = ?`. |
@@ -294,7 +294,7 @@ Each object is responsible for converting itself to SQL. An expression that cont
 SQL from theirs, and gathers their bound values in the same order, so an expression can be used anywhere another is
 accepted and its bound values follow it.
 
-These contracts extend `Expression` and add nothing to it. Each exists to mark what kind of expression is required:
+These contracts extend `Expression` and add nothing to it. Each exists to mark what type of expression is required:
 
 | Contract | Marks |
 |---|---|
@@ -628,7 +628,7 @@ A drop of a table or a database is a schema statement, executed on its own. The 
 
 `Column` creates column definitions. The factory used fixes the column's type.
 
-| Kind | Factories | Sizing |
+| Family | Factories | Sizing |
 |---|---|---|
 | Integer | `tinyInt()`, `smallInt()`, `mediumInt()`, `int()`, `bigInt()` | An optional display length. |
 | Decimal | `decimal()`, `float()`, `double()` | An optional length and number of decimal places. |
@@ -639,7 +639,7 @@ A drop of a table or a database is a schema statement, executed on its own. The 
 | Boolean | `boolean()` | None. |
 | JSON | `json()` | None. |
 
-Each factory takes the column's name first, followed by its sizing where the kind has any.
+Each factory takes the column's name first, followed by its sizing where the family has any.
 
 Every column has these modifiers:
 
@@ -656,7 +656,7 @@ Every column has these modifiers:
 | `virtual()` | Makes a generated column virtual. On a column that is not generated, it throws `InvalidSchemaException`. |
 | `stored()` | Makes a generated column stored. On a column that is not generated, it throws `InvalidSchemaException`. |
 
-Some kinds of column have further modifiers:
+Some families of column have further modifiers:
 
 | Modifier | Columns | Effect |
 |---|---|---|
@@ -668,7 +668,7 @@ Some kinds of column have further modifiers:
 | `defaultCurrentTimestamp()` | Temporal | Sets the default to `CURRENT_TIMESTAMP`. |
 | `onUpdateCurrentTimestamp()` | Temporal | Writes `ON UPDATE CURRENT_TIMESTAMP`. |
 
-A modifier used on a type within its kind that it does not apply to throws `InvalidSchemaException`, such as
+A modifier used on a column type it does not apply to throws `InvalidSchemaException`, such as
 `length()` on a `tinytext` column. `defaultCurrentTimestamp()` and `onUpdateCurrentTimestamp()` apply to `timestamp`
 and `datetime` only.
 
@@ -806,6 +806,12 @@ Nothing breaks. No database component exists before this change.
     language
   - `Drop` is not a schema statement, and `Drop::primaryKey()` takes a name
   - `after()` and `first()` are never written
+  - nothing checks that a later row's columns match the first row's, so no `InvalidExpressionException` is thrown
+    for a row whose columns differ
+  - a select gathers its table subquery's bound values before its columns', while writing the table after them, so
+    the placeholders and the values can disagree
+  - the temporal column factories take no precision argument, and a precision is reachable only through
+    `precision()`
 
 [#26]: https://github.com/thegamepanel/panel/issues/26
 [#27]: https://github.com/thegamepanel/panel/issues/27

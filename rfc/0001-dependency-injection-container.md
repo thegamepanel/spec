@@ -360,6 +360,18 @@ Nothing breaks. This is the first component, and the repository has no source co
   `Lazy` and `NoResolution` applying on parameters, and class attributes applying regardless of binding: first
   written down on 2026-09-14. The code at [728ad64] differs on each of these points, and the design here is what was
   intended.
+- The code at [728ad64] also differs from this design:
+  - a resolution's arguments are never read, so `with()` supplies nothing to a constructor
+  - an instance is cached only where a binding exists, because `shared` is read as false without one, so an
+    auto-wired class is constructed again on every resolution
+  - `Liminal` on a parameter is routed to a resolver, as `Lazy` and `NoResolution` are, because all three implement
+    `Resolvable`
+  - `Qualifier` declares `equals()`, which the container calls when matching a cached qualified instance and which
+    the qualifier example above does not implement
+  - a binding does not carry the module scope its builder was created for, which the binding catalogue holds
+    separately
+  - `BindingNotFoundException` and `InvalidFunctionException` also implement `ContainerException` and are absent
+    from the errors above, and nothing throws the first
 - PR [#23], feat(container): Dependency Injection, merged 2026-03-28: the implementation, whose merge is `decided`.
   Its commits land on `main` individually, ending at [728ad64]. The API, the resolution and invocation steps, the
   resolver behaviour and the exceptions are described from
