@@ -224,6 +224,20 @@ After the register phase the builder is consumed, producing the `BindingCatalogu
 container is constructed with, and is unavailable afterwards. This is the assembly
 [RFC-0001](0001-dependency-injection-container.md) leaves to the module lifecycle.
 
+#### Alias chains
+
+An alias may name another alias. Assembly flattens every chain, so each alias names the abstract that owns the
+binding directly and resolution stays a single hop.
+
+It is done here because a catalogue is assembled once and never changes afterwards, while an alias is normalised
+before the instance cache is consulted on every resolution, per
+[RFC-0006](0006-container-improvements.md). Flattening at assembly pays for the walk once, at boot, rather than on
+every resolution for a structure that cannot change.
+
+A chain returning to an alias already seen cannot be flattened, and fails the assembly, naming the aliases in the
+cycle. A cycle is therefore a boot failure that says what is wrong, rather than a resolution that exhausts the
+stack.
+
 ### Collection
 
 Everything a module contributes beyond bindings is pulled rather than pushed. A component asks for contributions
@@ -344,6 +358,10 @@ collect. Pulling lets a component collect on first use, or never.
 **A cacheable collector abstraction.** Components cache collected data in different shapes, and some gain nothing
 from caching, so an abstraction would have to cover cases that do not resemble each other.
 
+**Following alias chains at runtime**, walking from one alias to the next on each lookup. The walk would repeat on
+every resolution, in the path taken before the instance cache is consulted, for a structure fixed at boot. A cycle
+would also be found by exhausting the stack rather than when the catalogue was assembled.
+
 No other alternatives were weighed.
 
 ## Backwards compatibility
@@ -355,12 +373,9 @@ The container is constructed with its catalogues today and gains the step that b
 
 ## Open questions
 
-- **Chained aliases.** An alias pointing to another alias does not resolve, because alias resolution is a single
-  hop, and [RFC-0006](0006-container-improvements.md) leaves the fix to whatever builds catalogues, which is this
-  design. Either the builder flattens chains as it assembles the catalogue, so resolution stays one hop, or
-  resolution follows them at runtime. Neither is chosen here.
-
 ## Changelog
+
+- 2026-09-16: Alias chains are flattened when the catalogue is assembled, which settles the only open question.
 
 ## Sources
 
@@ -404,7 +419,8 @@ The container is constructed with its catalogues today and gains the step that b
   name and nothing is instantiated.
 - `PanelContext` being defined in the engine's shared values rather than inside collection; the registry's two
   construction modes expressed as process and cycle lifetimes; `EngineBuilder` being the module-facing surface over
-  the container's two registries; and the `ModuleException` marker with `ModuleSourceException` and
+  the container's two registries; alias chains being flattened at assembly, with a cycle failing the assembly and
+  naming the aliases in it; and the `ModuleException` marker with `ModuleSourceException` and
   `UnknownModuleException`: first written down on 2026-09-16.
 
 [#35]: https://github.com/thegamepanel/panel/issues/35
