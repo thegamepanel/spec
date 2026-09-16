@@ -23,9 +23,9 @@ jobs:
 
       # Pinned to the version that scaffolded this repository, so the rules it
       # is held to do not change underneath it. Raise it deliberately.
-      - name: Install ArchDoc v0.1.0-alpha.1
+      - name: Install ArchDoc v0.1.0-alpha.5
         env:
-          ARCHDOC_VERSION: v0.1.0-alpha.1
+          ARCHDOC_VERSION: v0.1.0-alpha.5
         run: |
           set -euo pipefail
           if [ "$ARCHDOC_VERSION" = "latest" ]; then
