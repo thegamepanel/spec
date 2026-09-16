@@ -15,14 +15,14 @@ obsoletes: []
 ## Context
 
 Every object in the query and schema builders produces its own SQL, per
-[RFC-0003](../rfc/0003-database-component.md). Thirty-three classes each write their own, interpolating names
+[RFC-0003](../rfc/0003-database-component.md). Thirty-two classes each write their own, interpolating names
 straight into the string and returning their bound values separately.
 
 Two consequences follow from that shape rather than from any one class. Names are written unquoted in some places and
 quoted in others, because each class decides for itself. And an insert computes its column list once for its SQL and
 again for its bound values, so the two can disagree and bind values to the wrong columns.
 
-Fixing either one class by class means fixing it thirty-three times and trusting whoever writes the thirty-fourth.
+Fixing either one class by class means fixing it thirty-two times and trusting whoever writes the thirty-third.
 
 ## Decision
 
@@ -34,7 +34,7 @@ value object that quotes and escapes it.
 ## Alternatives
 
 **An identifier value object alone.** Quoting was originally to be fixed by introducing that object and using it
-throughout. The object survives as part of this decision, but on its own it leaves thirty-three classes each
+throughout. The object survives as part of this decision, but on its own it leaves thirty-two classes each
 choosing whether to use it, and does nothing about SQL and bound values being produced separately.
 
 **Retrofitting quoting across the self-compiling classes**, then dismantling it once a compiler arrived anyway.
@@ -64,14 +64,14 @@ Constrained:
 
 ## Sources
 
-- Issue [#51], Engine - Database - PostgreSQL, 2026-08-19: the architecture, that thirty-three classes each define
+- Issue [#51], Engine - Database - PostgreSQL, 2026-08-19: the architecture, that thirty-three classes each define,
+  a count that includes the contract declaring the method alongside the thirty-two implementing it, which define
   their own SQL production, that this is the cause of both the unquoted names and the insert binding defect, the
   node, compiler, catalogue and compiled-result shape, what it buys in order of value, and its cost. This is
   `created` and `decided`.
-- Issue [#52], Engine - Database - Compiler seam, 2026-08-19, edited on 2026-09-13 only to replace names with issue
-  links: the contracts, the compiled result carrying SQL and bindings together, the identifier value object with its
-  quoting, qualification, wildcard and length rules, the literal quoter, and the hook where a complete statement can
-  be refused.
+- Issue [#52], Engine - Database - Compiler seam, 2026-08-19, with no edits: the contracts, the compiled result
+  carrying SQL and bindings together, the identifier value object with its quoting, qualification, wildcard and
+  length rules, the literal quoter, and the hook where a complete statement can be refused.
 - Issue [#41], Engine - Query Builder - Identifier quoting and escaping, 2026-08-07, closed 2026-08-19: the quoting
   and escaping that each class decided for itself. Its closing comment records the rejected retrofit across
   thirty-three self-compiling classes.

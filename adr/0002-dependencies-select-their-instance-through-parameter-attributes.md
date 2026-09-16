@@ -15,9 +15,8 @@ obsoletes: []
 ## Context
 
 A dependency's type often does not determine which instance it needs. Several implementations or instances can
-share one interface: every database connection is a `Connection`, and every filesystem shares one filesystem type.
-A parameter typed against that interface says what kind of object it needs, but not which one, so the choice has to
-be expressed somewhere else.
+share one interface: every database connection is a `Connection`. A parameter typed against that interface says
+what it needs, but not which one, so the choice has to be expressed somewhere else.
 
 What is known about the instances varies. Sometimes every concrete, and what maps to it, is known when the panel
 boots. Sometimes the concrete is only decided at runtime, from configuration or other state, by the subsystem that
@@ -44,12 +43,12 @@ which a third-party module cannot be expected to know, particularly when configu
 this dynamic and built for one purpose, it would add a great deal of complication, where the correct bindings and
 resolution can instead be trusted to exist.
 
-**Contextual attributes, as in Laravel's container.** Their shape comes from being added to an existing system under a
-strict backwards compatibility policy. As first implemented, a contextual attribute was paired with a resolver
-closure registered for it; a later change added a `resolve()` method on the attribute class, which is now their
-primary use and receives the attribute instance as a redundant argument. A resolvable attribute paired with a
-resolver class is a more structured implementation of the same idea, without the constraint of fitting an existing
-system.
+**Contextual attributes, as in Laravel's container.** Their shape comes from being added to an existing system under
+a strict backwards compatibility policy. A contextual attribute is either paired with a resolver closure registered
+for it, or carries a `resolve()` method, which receives the attribute instance as a redundant argument. The panel's
+author built the original implementation of the idea and co-authored the one Laravel merged, which shipped both
+forms together. A resolvable attribute paired with a resolver class is a more structured implementation of the same
+idea, without the constraint of fitting an existing system.
 
 No other alternatives were weighed.
 
@@ -97,9 +96,9 @@ Constrained:
 - Named and qualified bindings being for concretes known at boot, and resolvers for concretes decided by
   configuration or runtime state; resolvers being intended from the start, so that subsystems keep full control over
   their instances; the rejection of contextual binding by consuming class and why; and resolvers as a more structured
-  implementation of the contextual attributes that the panel's author added to Laravel, including how Laravel's
-  implementation was shaped by backwards compatibility, first paired with a resolver closure, and later given a
-  `resolve()` method: first written down on 2026-09-14.
+  implementation of the contextual attributes whose original implementation the panel's author built and whose
+  merged implementation they co-authored, including how that implementation was shaped by backwards compatibility
+  and the two forms it shipped with: first written down on 2026-09-14.
 - Laravel documentation, Service Container, ["Contextual Binding"][laravel-binding] and
   ["Contextual Attributes"][laravel-attributes], read 2026-09-14: the two Laravel mechanisms described as alternatives.
 - PR [#30], feat(database): Add the database component, merged 2026-04-17: the `Database` attribute and
