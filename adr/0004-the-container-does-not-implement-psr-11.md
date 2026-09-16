@@ -29,11 +29,13 @@ depends on the `Psr\Container` interfaces.
 
 ## Alternatives
 
-**Implementing PSR-11**, alongside the container's own API. The interchangeability it provides does not apply to a
-bespoke system shipped as a single binary. The PSRs are also dated, and implementing one forces a design into its
-shape, where the container is instead free to be shaped around what the panel needs.
+**Implementing PSR-11**, alongside the container's own API, which is the option this decision rejects. The
+interchangeability it provides does not apply to a bespoke system shipped as a single binary. The PSRs are also
+dated, and implementing one forces a design into its shape, where the container is instead free to be shaped around
+what the panel needs.
 
-No other alternative was weighed.
+Whether it was weighed at the time, or simply never adopted, is not recorded, and no other alternative appears in
+the record.
 
 ## Consequences
 

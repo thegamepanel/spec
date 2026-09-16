@@ -36,9 +36,9 @@ self-hosting has to add a third-party package repository, and it is supported up
 
 ## Alternatives
 
-**Staying on MySQL or MariaDB**, as before. PostgreSQL has considerably more features and functionality that the
-panel benefits from, and since the panel is built from scratch and ships as its own binary, there is nothing forcing
-the simpler assumption that MySQL was chosen for.
+**Staying on MySQL or MariaDB**, as before. The reason recorded for moving is that PostgreSQL offers more of what
+the panel needs, and that nothing forces the simpler assumption MySQL was chosen for, now that the panel is built
+from scratch and ships as its own binary. The comparison itself is not recorded.
 
 **Supporting both**, by abstracting over the two dialects. There is no requirement to run anywhere but where the
 panel is installed, so the abstraction would cost more than it gives, and neither dialect would be used properly.

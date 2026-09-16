@@ -26,10 +26,9 @@ or by its class, and a component receives the one it needs by its class.
 
 ## Alternatives
 
-**Configuration as arrays read by key.** Nothing enforces the shape of an array or the types of its values, so it
-gives no type safety.
-
-No other alternatives were weighed.
+Whether anything was weighed against typed objects is not recorded. Configuration held in arrays read by key is the
+obvious other option, and gives no type safety, since nothing enforces the shape of an array or the types of its
+values, but nothing records it being considered.
 
 ## Consequences
 

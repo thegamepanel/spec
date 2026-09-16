@@ -36,9 +36,9 @@ one runtime, and nothing in it abstracts over server APIs it will never run unde
 **Installing the panel as a PHP project**, as Pterodactyl is installed. Whoever installs it has to provide the right
 PHP version, the Composer dependencies and the rest, which is a much higher barrier to entry than a single binary.
 
-**Other PHP runtimes**, such as RoadRunner, Swoole or OpenSwoole, or PHP-FPM behind a web server. FrankenPHP is chosen
-over them because it can compile the entire application into a single binary, which is what lets the panel be
-distributed as an installable product.
+**Other PHP runtimes.** FrankenPHP is chosen over them because it can compile the entire application into a single
+binary, which is what lets the panel be distributed as an installable product. Which runtimes were weighed against
+it is not recorded.
 
 **Booting the application for every request.** A long-running worker process is more efficient.
 
