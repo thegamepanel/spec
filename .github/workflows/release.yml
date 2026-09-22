@@ -2,7 +2,9 @@ name: Release the specification
 
 # Every push to main publishes the specification as JSON, so that anything
 # rendering or indexing it elsewhere consumes a release asset instead of
-# parsing Markdown out of the repository.
+# parsing Markdown out of the repository. The same export is sent to
+# archdoc.dev, so the asset and the site are one snapshot rather than two
+# exports of the same commit taken separately.
 #
 # Chained to the lint workflow rather than repeating its checks, so a release
 # comes only from a commit whose specification passed. There is no way to
@@ -53,40 +55,13 @@ jobs:
           fetch-depth: 0
 
       # Pinned, and raised together with the pin in archdoc-lint.yml. The two
-      # must not drift: the version decides the shape of what is generated, and
-      # a mismatch is invisible locally.
-      - name: Install ArchDoc
-        env:
-          ARCHDOC_VERSION: v0.1.0-alpha.5
-        run: |
-          set -euo pipefail
-          if [ "$ARCHDOC_VERSION" = "latest" ]; then
-            base="https://github.com/ollieread/archdoc/releases/latest/download"
-            tag="$(curl -fsSL -o /dev/null -w '%{url_effective}' \
-              https://github.com/ollieread/archdoc/releases/latest | sed 's#.*/tag/##')"
-          else
-            base="https://github.com/ollieread/archdoc/releases/download/$ARCHDOC_VERSION"
-            tag="$ARCHDOC_VERSION"
-          fi
-          archive="archdoc_${tag#v}_linux_amd64.tar.gz"
-
-          # Downloaded outside the checkout. curl -O writes into the working
-          # directory, which is the tree actions/checkout just populated, and it
-          # opens with fopen("wb"), which writes through an existing symlink: a
-          # committed symlink named after the archive would have redirected it.
-          tmp="$(mktemp -d)"
-          cd "$tmp"
-
-          curl -fsSL -O "$base/$archive"
-          curl -fsSL -O "$base/checksums.txt"
-          # The binary is about to run over the repository, so check it is the
-          # one the release published.
-          grep " $archive\$" checksums.txt | sha256sum -c -
-
-          tar -xzf "$archive" archdoc
-          install -m 0755 archdoc /usr/local/bin/archdoc
-          cd - >/dev/null
-          rm -rf "$tmp"
+      # must not drift: the version decides the shape of what is generated,
+      # and a mismatch is invisible locally. The export step below deliberately
+      # names no version, so it uses the binary this step installs rather than
+      # laying a second one over it.
+      - uses: archdochq/setup@v1.0.0
+        with:
+          version: v0.5.0
 
       # Only on a manual run. The chained path is already gated on the lint
       # workflow having passed for this commit, and repeating it there would
@@ -96,6 +71,7 @@ jobs:
         run: |
           archdoc lint
           archdoc index --check
+          archdoc glossary --check
 
       - name: Name the release
         id: name
@@ -110,38 +86,37 @@ jobs:
           tag="$(git show -s --format=%cs HEAD)-$(git rev-parse --short HEAD)"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           # The asset is named the same in every release, so that
-          # releases/latest/download/spec.zip is a stable address for whatever
+          # releases/latest/download/spec.json is a stable address for whatever
           # the specification currently is. That endpoint resolves by asset
           # name, so a name carrying the tag would have no such address. The
           # tag is what tells one release from another.
-          echo "asset=spec.zip" >> "$GITHUB_OUTPUT"
+          echo "asset=spec.json" >> "$GITHUB_OUTPUT"
 
+      # Export and publish in one step, so the asset attached to the release
+      # and the snapshot archdoc.dev serves come from the same export and
+      # cannot describe different commits.
+      #
+      # The commit is named rather than left to default: the action defaults it
+      # to github.sha, which under workflow_run is the default branch's head,
+      # not the commit this job checked out.
+      #
+      # The token is a repository secret, so any branch this workflow runs on
+      # can publish and the endpoint does not restrict one itself. The triggers
+      # are main and manual dispatch, which is what limits it.
       - name: Export the specification
-        run: |
-          set -euo pipefail
-          # A tree rather than one document: index.json carrying every document
-          # without bodies, one file per document beside it, and the glossary.
-          # A page rendering one RFC should not have to fetch all of it.
-          archdoc export --out export
-          # The schema travels with the export, so a consumer can validate what
-          # it was handed without knowing which version produced it.
-          archdoc export --schema > export/schema.json
-
-      - name: Build the archive
-        env:
-          ASSET: ${{ steps.name.outputs.asset }}
-        run: |
-          set -euo pipefail
-          # Zipped from inside the directory, so the archive holds adr/, rfc/
-          # and index.json at its root rather than an export/ wrapper.
-          cd export
-          zip -qr "../$ASSET" .
+        id: export
+        uses: archdochq/export@v1.0.0
+        with:
+          file: ${{ steps.name.outputs.asset }}
+          commit: ${{ github.event.workflow_run.head_sha || github.sha }}
+          publish-token: ${{ secrets.ARCHDOCDEV_TOKEN }}
 
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.name.outputs.tag }}
           ASSET: ${{ steps.name.outputs.asset }}
+          DOCUMENTS: ${{ steps.export.outputs.documents }}
         run: |
           set -euo pipefail
           # Read from git rather than from the event payload. A commit message
@@ -151,11 +126,10 @@ jobs:
           # the commit this job checked out.
           subject="$(git show -s --format=%s HEAD)"
           sha="$(git rev-parse HEAD)"
-          documents="$(find export/adr export/rfc -name '*.json' 2>/dev/null | wc -l | tr -d ' ')"
 
           notes="$(printf '%s\n\n%s\n' \
             "$subject" \
-            "Exported from $sha. $documents documents, with the glossary and the JSON Schema the export conforms to.")"
+            "Exported from $sha. $DOCUMENTS documents, with the glossary, as the one JSON document archdoc export emits.")"
 
           # A re-run of a commit that already has its release replaces the
           # asset. Creating the tag again would fail, and failing a job that has
