@@ -1,7 +1,7 @@
 ---
 title: Resolvable attribute
 formerly: []
-named_by: 
+named_by: RFC-0001
 ---
 
 # Resolvable attribute

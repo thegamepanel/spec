@@ -1,7 +1,7 @@
 ---
 title: Configuration object
 formerly: []
-named_by: 
+named_by: RFC-0002
 ---
 
 # Configuration object
