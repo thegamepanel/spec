@@ -28,7 +28,12 @@ jobs:
       # document that caused it, and leaves archdoc on PATH for the step below.
       - uses: archdochq/lint@v1
         with:
-          version: v0.4.0
+          version: v0.5.0
 
-      - name: Check the index is current
-        run: archdoc index --check
+      # Both generated files. A stale glossary is not cosmetic: every link to
+      # a term resolves to an anchor on it, so one that has not been
+      # regenerated leaves those links pointing at nothing.
+      - name: Check the generated files are current
+        run: |
+          archdoc index --check
+          archdoc glossary --check

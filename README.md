@@ -1,7 +1,7 @@
 # The Game Panel Spec
 
 The design record and current specification for The Game Panel, managed with
-[ArchDoc](https://github.com/ollieread/archdoc).
+[ArchDoc](https://github.com/archdochq/archdoc).
 
 - **`rfc/`** proposes how something should work, and has a page in the spec once built.
 - **`adr/`** records a decision that constrains designs across the spec.
@@ -15,7 +15,7 @@ Read [`PROCESS.md`](PROCESS.md) before adding anything.
 
 ## Working on this repository
 
-Install [ArchDoc](https://github.com/ollieread/archdoc), then enable the hooks once
+Install [ArchDoc](https://github.com/archdochq/archdoc), then enable the hooks once
 per clone:
 
 ```

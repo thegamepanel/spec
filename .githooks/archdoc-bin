@@ -21,7 +21,7 @@ archdoc_path() {
         fi
     done
     echo "archdoc was not found on PATH or in the usual install locations." >&2
-    echo "Install it: https://github.com/ollieread/archdoc" >&2
+    echo "Install it: https://github.com/archdochq/archdoc" >&2
     echo "Already installed? A hook does not read your shell profile, so add" >&2
     echo "its directory to PATH somewhere every shell reads." >&2
     return 1
