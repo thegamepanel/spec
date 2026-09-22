@@ -23,41 +23,12 @@ jobs:
 
       # Pinned to the version that scaffolded this repository, so the rules it
       # is held to do not change underneath it. Raise it deliberately.
-      - name: Install ArchDoc v0.1.0-alpha.5
-        env:
-          ARCHDOC_VERSION: v0.1.0-alpha.5
-        run: |
-          set -euo pipefail
-          if [ "$ARCHDOC_VERSION" = "latest" ]; then
-            base="https://github.com/ollieread/archdoc/releases/latest/download"
-            tag="$(curl -fsSL -o /dev/null -w '%{url_effective}' \
-              https://github.com/ollieread/archdoc/releases/latest | sed 's#.*/tag/##')"
-          else
-            base="https://github.com/ollieread/archdoc/releases/download/$ARCHDOC_VERSION"
-            tag="$ARCHDOC_VERSION"
-          fi
-          archive="archdoc_${tag#v}_linux_amd64.tar.gz"
-
-          # Downloaded outside the checkout. curl -O writes into the working
-          # directory, which is the tree actions/checkout just populated, and it
-          # opens with fopen("wb"), which writes through an existing symlink: a
-          # committed symlink named after the archive would have redirected it.
-          tmp="$(mktemp -d)"
-          cd "$tmp"
-
-          curl -fsSL -O "$base/$archive"
-          curl -fsSL -O "$base/checksums.txt"
-          # The binary is about to run over the repository, so check it is the
-          # one the release published.
-          grep " $archive\$" checksums.txt | sha256sum -c -
-
-          tar -xzf "$archive" archdoc
-          install -m 0755 archdoc /usr/local/bin/archdoc
-          cd - >/dev/null
-          rm -rf "$tmp"
-
-      - name: Lint
-        run: archdoc lint
+      #
+      # The action reports each finding as an annotation on the line of the
+      # document that caused it, and leaves archdoc on PATH for the step below.
+      - uses: archdochq/lint@v1
+        with:
+          version: v0.4.0
 
       - name: Check the index is current
         run: archdoc index --check
