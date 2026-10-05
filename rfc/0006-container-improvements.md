@@ -1,9 +1,9 @@
 ---
 id: RFC-0006
 title: Container improvements
-status: proposed
+status: accepted
 created: 2026-09-14
-decided:
+decided: 2026-10-05
 depends: [ADR-0014, ADR-0020]
 updates: [RFC-0001]
 obsoletes: []
