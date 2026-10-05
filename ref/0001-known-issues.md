@@ -9,22 +9,21 @@ verified: 2026-09-16
 Defects known to be present in the built code, as at commit
 [3372f20](https://github.com/thegamepanel/panel/commit/3372f20).
 
-This is informational and never normative. Where an entry contradicts a document in this repository, that document
-is named. Some entries contradict nothing, because the behaviour was never specified; they appear anyway, since
-what a reader needs is the defect and its consequence, not its documentation status.
+This document is informational and never normative. Where an entry contradicts a document in this repository, the
+entry names that document. Entries that contradict nothing, because the behaviour was never specified, are listed as
+well.
 
 An issue link means the defect is tracked there, not that it is fixed. [#41], [#42] and [#48] are closed, and the
-behaviour each describes is still present: each was closed in favour of the PostgreSQL work rather than by a change
-to the code. An entry leaves this document when the behaviour changes, struck through with what changed it, so the
+behaviour each describes is still present: each was closed in favour of the PostgreSQL work rather than by a change to
+the code. When the behaviour behind an entry changes, the entry is struck through and names what changed it, so the
 record of its having existed survives.
 
 ## Security
 
 ### Identifiers reach SQL unescaped
 
-Values passed to the query builder are bound and are safe. Identifiers are not. A table, column or index name is
-interpolated into the SQL as given, so a name taken from untrusted input can close the statement and append
-another.
+Values passed to the query builder are bound, and are safe. Identifiers are not. A table, column or index name is
+interpolated into the SQL as given, so a name taken from untrusted input can close the statement and append another.
 
 The surface is every place a name is written rather than bound:
 
@@ -36,56 +35,56 @@ The surface is every place a name is written rather than bound:
 | A column in a `WHERE`, `HAVING`, `GROUP BY` or `ORDER BY` clause | Unquoted. |
 | A column inside an aggregate | Unquoted. |
 | A column in an `UPDATE ... SET` clause | Between backticks, with no backtick inside it doubled. |
-| Every identifier in a schema statement | Between backticks, with no backtick inside it doubled. |
+| Every identifier in a [schema statement](../GLOSSARY.md#schema-statement) | Between backticks, with no backtick inside it doubled. |
 
-Quoting without escaping is not protection: a name containing a backtick closes the quoting and everything after it
+Quoting without escaping is not protection: a name containing a backtick closes the quoting, and everything after it
 is SQL.
 
 **The operator in a join condition is interpolated too.** `JoinClause::on()` writes `{$left} {$operator} {$right}`
-and validates none of the three. A `WHERE` clause is better off, because its operator is matched against a known
-set and an unrecognised one throws, but a join's is not.
+and validates none of the three. The operator in a `WHERE` clause is matched against a known set, and an unrecognised
+one throws. The operator in a join is not checked.
 
 Tracked by [#41], which describes the quoting and escaping but not the operator. The fix is the compiler in
 [ADR-0017](../adr/0017-sql-is-produced-by-a-compiler-not-by-the-query-objects.md), where every name becomes SQL
 through one identifier object.
 
-**This is latent rather than live.** Nothing in the engine currently takes an identifier from a request: there is
-no HTTP layer, no actions, and no caller that builds a query from input. The exposure arrives with the first
-consumer that does, which is why it is recorded here rather than left to be rediscovered then.
+**This is latent rather than live.** Nothing in the [engine](../GLOSSARY.md#engine) currently takes an identifier from a
+request: there is no HTTP layer, no actions, and no caller that builds a query from input. The exposure arrives with the
+first consumer that does.
 
 ### Schema literals are quoted without escaping
 
-A column's string default and a column's or table's comment are written between single quotes with nothing escaped,
-so a value containing a quote closes it. Schema statements bind no values, so every literal in them is written this
-way. Tracked by [#41].
+A column's string default and a column's or table's comment are written between single quotes with nothing escaped, so a
+value containing a quote closes it. A [schema statement](../GLOSSARY.md#schema-statement) binds no values, so every
+literal in one is written this way. Tracked by [#41].
 
 ## Container
 
 | What happens | Against | Issue |
 |---|---|---|
-| A shared binding resolved twice through an alias returns a new instance each time. Instances are stored under the binding's abstract and read back under the class the resolution names, with no alias normalisation on the read. | [RFC-0001](../rfc/0001-dependency-injection-container.md) | [#44] |
+| A [shared](../GLOSSARY.md#shared) [binding](../GLOSSARY.md#binding) resolved twice through an [alias](../GLOSSARY.md#alias) returns a new instance each time. Instances are stored under the binding's [abstract](../GLOSSARY.md#abstract) and read back under the class the [resolution](../GLOSSARY.md#resolution) names, with no alias normalisation on the read. | [RFC-0001](../rfc/0001-dependency-injection-container.md) | [#44] |
 | An auto-wired class is never cached. The builder defaults `shared` to true, while resolution reads it as false when there is no binding, so a class with no binding is constructed again on every resolution. Under a worker that is one instance per resolution where one per process is intended. The fallback that would key such an instance by the requested class is therefore unreachable. | [RFC-0001](../rfc/0001-dependency-injection-container.md) | [#63] |
 | `Resolution::with()` has no effect. A constructor is invoked as `Invocation::constructor($class)` with nothing passed, and the resolution's arguments are read nowhere, so they are silently discarded. | [RFC-0001](../rfc/0001-dependency-injection-container.md) | none |
-| A binding does not record the module scope it was registered under. The builder carries one and does not copy it into the binding; the catalogue keeps a separate map of scope to classes, which nothing reads. | [RFC-0001](../rfc/0001-dependency-injection-container.md) | none |
-| `Lazy`, `Liminal` and `NoResolution` on a parameter are handled as resolvable attributes, not by the container. Each implements `Resolvable`, so a parameter carrying one is routed to the resolver registered against that attribute's class, and throws `InvalidResolverException` when none is. Only `Ghost` has a resolver. | [RFC-0001](../rfc/0001-dependency-injection-container.md) | none |
-| A qualified instance is cached per qualifier value rather than per qualifier class. The cache compares the qualifier's class and then calls `equals()`. | [RFC-0001](../rfc/0001-dependency-injection-container.md) | none |
+| A binding does not record the [module scope](../GLOSSARY.md#module-scope) it was registered under. The builder carries one and does not copy it into the binding; the [catalogue](../GLOSSARY.md#catalogue) keeps a separate map of scope to classes, which nothing reads. | [RFC-0001](../rfc/0001-dependency-injection-container.md) | none |
+| `Lazy`, `Liminal` and `NoResolution` on a parameter are handled as [resolvable attribute](../GLOSSARY.md#resolvable-attribute)s, not by the container. Each implements `Resolvable`, so a parameter carrying one is routed to the [resolver](../GLOSSARY.md#resolver) registered against that attribute's class, and throws `InvalidResolverException` when none is. Only `Ghost` has a resolver. | [RFC-0001](../rfc/0001-dependency-injection-container.md) | none |
+| A qualified instance is cached per [qualifier](../GLOSSARY.md#qualifier) value rather than per qualifier class. The cache compares the qualifier's class and then calls `equals()`. | [RFC-0001](../rfc/0001-dependency-injection-container.md) | none |
 | `BindingNotFoundException` is never thrown. It is not referenced anywhere outside its own definition. | [RFC-0001](../rfc/0001-dependency-injection-container.md) | none |
-| Neither `BindingRegistry` nor `ResolverRegistry` produces a catalogue. Catalogues are constructed from arrays, so the registries and the catalogues have no seam between them. | [ADR-0003](../adr/0003-mutable-registries-are-sealed-into-immutable-catalogues.md) | none |
+| Neither `BindingRegistry` nor `ResolverRegistry` produces a catalogue. Catalogues are constructed from arrays, so there is no seam between a [registry](../GLOSSARY.md#registry) and its catalogue. | [ADR-0003](../adr/0003-mutable-registries-are-sealed-into-immutable-catalogues.md) | none |
 
 ## Configuration
 
 | What happens | Against | Issue |
 |---|---|---|
 | `Env::string()` returns the default for a value it cannot cast, where `int()`, `float()` and `bool()` throw. | [RFC-0004](../rfc/0004-toml-configuration-loading.md), [ADR-0006](../adr/0006-environment-variables-are-only-read-during-bootstrap.md) | none |
-| Nothing binds configuration objects into the container, so a configuration class cannot be resolved by type. | [RFC-0002](../rfc/0002-configuration-objects.md) | none |
-| Nothing confines `Env` to bootstrap. `destroy()` exists, and once initialised it is readable from anywhere until it is called. | [ADR-0006](../adr/0006-environment-variables-are-only-read-during-bootstrap.md) | none |
+| Nothing binds [configuration object](../GLOSSARY.md#configuration-object)s into the container, so a configuration class cannot be resolved by type. | [RFC-0002](../rfc/0002-configuration-objects.md) | none |
+| Nothing confines `Env` to bootstrap. `destroy()` exists, but once initialised `Env` is readable from anywhere until `destroy()` is called. | [ADR-0006](../adr/0006-environment-variables-are-only-read-during-bootstrap.md) | none |
 | `MissingEnvVariableException` is never thrown. It is not referenced anywhere outside its own definition. | [RFC-0002](../rfc/0002-configuration-objects.md) | none |
 
 ## Database
 
 | What happens | Against | Issue |
 |---|---|---|
-| A connection's configured options take precedence over the defaults, so a connection configuring `PDO::ATTR_ERRMODE` overrides the error mode everything else relies on. The options are merged with the configured set on the left. | [RFC-0003](../rfc/0003-database-component.md) | none |
+| A [connection](../GLOSSARY.md#connection)'s configured options take precedence over the defaults, so a connection configuring `PDO::ATTR_ERRMODE` overrides the error mode everything else relies on. The options are merged with the configured set on the left. | [RFC-0003](../rfc/0003-database-component.md) | none |
 | `persistent` is validated and never applied. `PDO::ATTR_PERSISTENT` appears nowhere in the source. | [RFC-0003](../rfc/0003-database-component.md) | none |
 | A password may not be empty, which rules out socket peer authentication. | [RFC-0004](../rfc/0004-toml-configuration-loading.md) | [#48] |
 | `WriteResult::lastInsertId()` reports the connection's last insert, not the statement's, so it returns a value after an update or a delete. | [RFC-0003](../rfc/0003-database-component.md) | none |
@@ -101,7 +100,7 @@ way. Tracked by [#41].
 | An insert with no rows raises an undefined array key error rather than throwing `InvalidExpressionException`. | [RFC-0003](../rfc/0003-database-component.md) | [#42] |
 | An insert does not check that later rows carry the same columns as the first. Nothing validates the key set, so a row with different keys is written against the first row's column list. | [RFC-0003](../rfc/0003-database-component.md) | [#42] |
 | A select gathers its bound values in a different order from its placeholders. The table subquery's values are collected before the columns', while the table is written after the columns, so a select with both a bound subquery table and a bound column expression binds them the wrong way round. | [RFC-0003](../rfc/0003-database-component.md) | none |
-| `whereIn()` and `whereNotIn()` given an expression write the subquery with the `AND` conjunction, because they delegate to the raw form rather than the conjunction they were called for. | [RFC-0003](../rfc/0003-database-component.md) | none |
+| `whereIn()` and `whereNotIn()` given an [expression](../GLOSSARY.md#expression) write the subquery with the `AND` conjunction, because they delegate to the raw form rather than the conjunction they were called for. | [RFC-0003](../rfc/0003-database-component.md) | none |
 | `orderBy()` accepts any direction. Anything that is not `desc`, in any case, orders ascending, including a misspelling. | [RFC-0003](../rfc/0003-database-component.md) | none |
 | An offset set without a limit is written on its own, producing `OFFSET` with no `LIMIT`, which MySQL rejects. | [RFC-0003](../rfc/0003-database-component.md) | none |
 
@@ -111,12 +110,11 @@ way. Tracked by [#41].
 |---|---|---|
 | `after()` and `first()` are recorded on a column and never written into the SQL. | [RFC-0003](../rfc/0003-database-component.md) | none |
 | The name given to `Drop::primaryKey()` is discarded. Altering a table records dropping the primary key as a flag. | [RFC-0003](../rfc/0003-database-component.md) | none |
-| `Drop` is not a schema statement. It implements the expression contract rather than the schema one. | [RFC-0003](../rfc/0003-database-component.md) | none |
+| `Drop` is not a [schema statement](../GLOSSARY.md#schema-statement). It implements the [expression](../GLOSSARY.md#expression) contract rather than the schema one. | [RFC-0003](../rfc/0003-database-component.md) | none |
 
 ## Decided but not built
 
-These are not defects. Each is a decision this repository records that the code has not yet caught up with, listed
-so the gap is visible in one place.
+These are not defects. Each is a decision this repository records that the code does not yet follow.
 
 | Decision | State of the code |
 |---|---|
