@@ -28,6 +28,11 @@ When a [resolution](../GLOSSARY.md#resolution) is checked against the cache, onl
 known. Whether its [binding](../GLOSSARY.md#binding) or its class makes it [liminal](../GLOSSARY.md#liminal) is found
 out afterwards, once the cache has already been consulted.
 
+A shared instance resolved through an [alias](../GLOSSARY.md#alias) is cached under a different class from the one it
+is read under, so each resolution through the alias constructs a new instance. A resolution given both a name and a
+[qualifier](../GLOSSARY.md#qualifier) ignores the qualifier without saying so. A
+[lazy proxy](../GLOSSARY.md#lazy-proxy) is made for the class as requested, which PHP cannot do for an interface.
+
 A class that depends on itself, directly or through other classes, exhausts the call stack, and nothing reports
 which classes are involved.
 
@@ -59,7 +64,8 @@ final class InstanceCache
 
 A cache will hold one instance per class, one per class and name, and one per class and qualifier class. The qualifier's
 class is its key, as it is in [RFC-0001](0001-dependency-injection-container.md), and any value the qualifier carries is
-not part of it.
+not part of it. The container will never give a cache both a name and a qualifier class, since a resolution cannot have
+both.
 
 Whether a cache holds its instances strongly or weakly will be chosen when it is created. In a weak cache the weak
 reference is internal: `get()` will return the instance, typed as the class requested, or `null`, both when nothing was
@@ -80,7 +86,7 @@ private InstanceCache $liminalInstances = InstanceCache::weak();
 ```
 
 Reading and writing will both pick a cache by [effective liminality](../GLOSSARY.md#effective-liminality), then delegate
-to it, so the choice is made in one place. A [liminal](../GLOSSARY.md#liminal) resolution and a shared resolution of the
+to it. A [liminal](../GLOSSARY.md#liminal) resolution and a shared resolution of the
 same class will occupy separate entries.
 
 ### Class attributes
@@ -106,8 +112,9 @@ These steps will replace the [resolution](../GLOSSARY.md#resolution) steps of
 
 1. **Alias.** An [alias](../GLOSSARY.md#alias) is replaced by the [abstract](../GLOSSARY.md#abstract) it points to,
    once. The cache and the [resolution stack](../GLOSSARY.md#resolution-stack) use the class this step produces, and
-   class-level attributes are read from it and from the binding's concrete class.
-2. **Binding.** The [binding](../GLOSSARY.md#binding) for the requested class, name and
+   class-level attributes are read from it and from the [binding](../GLOSSARY.md#binding)'s
+   [concrete](../GLOSSARY.md#concrete) class.
+2. **Binding.** The binding for the requested class, name and
    [qualifier](../GLOSSARY.md#qualifier) is looked up. The lookup replaces an alias itself, once, so it reaches the
    same class as the first step.
 3. **Liminality.** The resolution is [liminal](../GLOSSARY.md#liminal) if it asks to be, if its binding marks it
@@ -118,19 +125,21 @@ These steps will replace the [resolution](../GLOSSARY.md#resolution) steps of
    qualifier class where the resolution has one.
 5. **Lazy proxy.** If the resolution is lazy, its binding marks it lazy, or `Lazy` applies to it, a
    [lazy proxy](../GLOSSARY.md#lazy-proxy) is returned. If `NoResolution` applies and the binding has no instance or
-   factory, it throws here instead, as it would at construction. The proxy is made for the binding's
-   [concrete](../GLOSSARY.md#concrete) class, or the class from the first step where there is no concrete class, and
-   the instance it forwards to must be of that class. If that class is an interface or abstract, it throws
-   `NotInstantiableException`. When the proxy is first used, the resolution runs again from the first step with this
-   step skipped.
+   factory, it throws here instead, as it would at construction. The proxy is made for the binding's concrete class,
+   or the class from the first step where there is no concrete class. If that class is an interface, is abstract or
+   extends an internal PHP class, it throws `NotInstantiableException`. A class with no properties that could trigger
+   initialisation is resolved straight away, as in [RFC-0001](0001-dependency-injection-container.md), so the
+   resolution continues to the next step without a proxy. When the proxy is first used, the resolution runs again from
+   the first step with this step skipped. If the instance it produces is not one PHP accepts for the proxy, such as an
+   instance of a subclass, it throws `DependencyResolutionException`.
 6. **Resolution stack.** The resolution's entry is added to the resolution stack, as described under Circular
    dependencies.
 7. **Instance.** If the binding holds an instance, that instance is the result. If it has a factory, the factory is
    invoked through the container and its return value is the result.
 8. **Construction.** Otherwise the container constructs the binding's concrete class, or the class from the first
-   step where there is no concrete class. If `NoResolution` applies to the resolution, it throws.
-   A class that is not instantiable throws. A class with no constructor is instantiated directly, and a class with one
-   has its constructor invoked through the container.
+   step where there is no concrete class. If `NoResolution` applies to the resolution, it throws. A class that is not
+   instantiable throws. A class with no constructor is instantiated directly, and a class with one has its constructor
+   invoked through the container.
 9. **Sharing.** Unless a binding marks it not shared, the instance is cached: in the weak cache if the resolution is
    liminal, and in the strong cache otherwise, under the class from the first step, and the name or qualifier class
    where the resolution has one.
@@ -152,40 +161,44 @@ identified the same way as a [shared](../GLOSSARY.md#shared) instance in the
 name or [qualifier](../GLOSSARY.md#qualifier) class where the resolution has one.
 
 A resolution whose entry is already on the stack will throw `CircularDependencyException` instead of adding it. Its
-message will name the class of every entry in the chain in order, from the first appearance of the repeated entry to
-its repetition, such as `A`, `B`, `C` and then `A` again.
+message will name every entry in the chain in order, each by its class and by its name or qualifier class where it has
+one, from the first appearance of the repeated entry to its repetition, such as `A`, `B`, `C` and then `A` again.
 
 Only eager construction of the same resolution will be detected:
 
 - A class that depends on a [named binding](../GLOSSARY.md#named-binding) or
-  [qualified binding](../GLOSSARY.md#qualified-binding) of its own [abstract](../GLOSSARY.md#abstract) is not a cycle,
-  because the two resolutions have different entries. A decorator bound to `Cache`, whose constructor takes the `Cache`
-  [binding](../GLOSSARY.md#binding) named `inner`, resolves normally.
+  [qualified binding](../GLOSSARY.md#qualified-binding) of its own [abstract](../GLOSSARY.md#abstract) is not a
+  circular dependency, because the two resolutions have different entries. A decorator bound to `Cache`, whose
+  constructor takes the `Cache` [binding](../GLOSSARY.md#binding) named `inner`, resolves normally.
 - A resolution already on the stack, requested again lazily, through its binding or through `Lazy`, returns a lazy
   proxy instead of throwing, because a resolution that returns a proxy adds no entry. When the proxy is first used,
   the resolution runs again from the alias step, and a shared resolution whose first construction has finished finds
   its instance in the cache. If the first construction is still on the stack at that point, such as when the proxy is
-  used inside the constructor that requested it, that is a cycle, and it throws.
+  used inside the constructor that requested it, that is a circular dependency, and it throws. A class with no
+  properties that could trigger initialisation is given no proxy, so a lazy request for one already on the stack is a
+  circular dependency.
 - A [ghost object](../GLOSSARY.md#ghost-object) is created without a resolution, and its constructor runs when it is
-  first accessed, so `Ghost` breaks a cycle without touching the stack.
-- A class resolved twice in sequence, such as the same class for two parameters of one constructor, is not a cycle,
-  because the first resolution has left the stack before the second starts.
+  first accessed, so `Ghost` breaks a circular dependency without touching the stack.
+- A class resolved twice in sequence, such as the same class for two parameters of one constructor, is not a circular
+  dependency, because the first resolution has left the stack before the second starts.
 - A resolution that throws leaves the stack as it was before it started, so an unrelated resolution afterwards is
-  not reported as a cycle.
+  not reported as a circular dependency.
 
 ### Errors
 
 A circular dependency will throw `CircularDependencyException`, which will be final, extend `RuntimeException` and
 implement `ContainerException`. It will be thrown when a [resolution](../GLOSSARY.md#resolution) being constructed
-eagerly is required again before it finishes, and will carry the chain of classes in order.
+eagerly is required again before it finishes, and will carry the chain of entries in order.
 
 A resolution given both a name and a [qualifier](../GLOSSARY.md#qualifier) will throw `InvalidResolutionException`,
 which will be final, extend `InvalidArgumentException` and implement `ContainerException`, as
 `InvalidInvocationException` does for an [invocation](../GLOSSARY.md#invocation).
 
-A lazy resolution whose proxy would be made for an interface or an abstract class will throw
-`NotInstantiableException`, which [RFC-0001](0001-dependency-injection-container.md) throws for a class to be
-constructed that is not instantiable.
+A lazy resolution whose proxy would be made for an interface, an abstract class or a class extending an internal PHP
+class will throw `NotInstantiableException`, which [RFC-0001](0001-dependency-injection-container.md) throws for a class
+to be constructed that is not instantiable. A lazy proxy whose resolution produces an instance PHP does not accept for
+it will throw `DependencyResolutionException` when it is first used, which RFC-0001 throws when a
+[dependency](../GLOSSARY.md#dependency) cannot be resolved.
 
 ### Out of scope
 
@@ -201,13 +214,13 @@ The decisions this design rests on are recorded separately, with the alternative
 
 - memoising class-level attributes as presence flags, in
   [ADR-0014](../adr/0014-class-level-attributes-are-memoised-as-presence-flags.md)
-- not memoising resolution data per parameter, in
+- not memoising [resolution](../GLOSSARY.md#resolution) data per parameter, in
   [ADR-0020](../adr/0020-resolution-data-is-not-memoised-per-parameter.md)
 
 **One cache holding every instance through weak references.** We rejected this because a weak reference is pointless
 beside a strong one in the same store, and a [liminal](../GLOSSARY.md#liminal) and a [shared](../GLOSSARY.md#shared)
-[resolution](../GLOSSARY.md#resolution) of one class are different cache identities: resolving a class without
-liminality should still cache it normally.
+resolution of one class are different cache identities: resolving a class without liminality should still cache it
+normally.
 
 **Choosing strong or weak references with an enum or a flag.** We rejected this because static factories follow the
 container's own convention, such as `Resolution::for()` and `Invocation::callable()`.
@@ -217,8 +230,9 @@ so that both check them in the same order. We rejected this because it leaves tw
 choice, which liminal named and qualified instances would grow to six caches.
 
 **Matching qualified instances by qualifier value.** A qualified instance would be found by scanning the instances of
-its class and comparing qualifiers with `equals()`, as the container does now. We rejected this because
-[RFC-0001](0001-dependency-injection-container.md) makes the qualifier's class the key and ignores any value it carries.
+its class and comparing [qualifiers](../GLOSSARY.md#qualifier) with `equals()`, as the container does now. We rejected
+this because [RFC-0001](0001-dependency-injection-container.md) makes the qualifier's class the key and ignores any
+value it carries.
 
 **A return type that depends on how the cache holds its instances.** `get()` would declare a conditional return type
 keyed on whether the cache is weak. We rejected this because PHPStan accepts conditional return types only over
@@ -226,30 +240,30 @@ parameters and template types, and a call site cannot know which type of cache i
 
 **Reading class-level attributes from one class only.** An attribute would apply only when carried by the requested
 class, or only when carried by the class being constructed. We rejected this because a
-[binding](../GLOSSARY.md#binding)'s
-[concrete](../GLOSSARY.md#concrete) class is also an [alias](../GLOSSARY.md#alias) of its
-[abstract](../GLOSSARY.md#abstract), so the requested class after normalisation is the abstract whichever of the two is
-requested. Reading it alone would never find an attribute on the concrete class, and reading only the class being
+[binding](../GLOSSARY.md#binding)'s [concrete](../GLOSSARY.md#concrete) class is also an [alias](../GLOSSARY.md#alias)
+of its [abstract](../GLOSSARY.md#abstract), so the requested class after normalisation is the abstract whichever of the
+two is requested. Reading it alone would never find an attribute on the concrete class, and reading only the class being
 constructed would never find one on an interface.
 
 **A name taking precedence over a qualifier.** A resolution given both would resolve as if only the name were given. We
-rejected this because the [qualifier](../GLOSSARY.md#qualifier) would be dropped without the caller knowing.
+rejected this because the qualifier would be dropped without the caller knowing.
 
-**Resolving eagerly when a proxy cannot be made.** A lazy resolution whose proxy would be made for an interface or an
-abstract class would construct its instance at once. We rejected this because the laziness would be dropped without
-the caller knowing, and a cycle relying on it would be reported with nothing to say why.
+**Resolving eagerly when a proxy cannot be made.** A lazy resolution whose proxy would be made for an interface, an
+abstract class or a class extending an internal PHP class would construct its instance at once. We rejected this
+because the laziness would be dropped without the caller knowing, and a circular dependency relying on it would be
+reported with nothing to say why.
 
 **Adding a stack entry when a resolution starts.** Every resolution would add its entry before the cached instance and
 [lazy proxy](../GLOSSARY.md#lazy-proxy) steps. We rejected this because a lazy request for a resolution already on the
 [resolution stack](../GLOSSARY.md#resolution-stack) would throw before its proxy could be returned, so laziness would
-break a cycle only where no lazy request meets its own entry.
+break a circular dependency only where no lazy request meets its own entry.
 
 **Identifying stack entries by class alone.** We rejected this because a class that depends on a
 [named binding](../GLOSSARY.md#named-binding) or [qualified binding](../GLOSSARY.md#qualified-binding) of its own
-abstract, such as a decorator, would be reported as a cycle.
+abstract, such as a decorator, would be reported as a circular dependency.
 
 **Removing a stack entry only when a resolution returns.** We rejected this because a resolution that throws would
-leave its entry behind, and an unrelated resolution afterwards would be reported as a cycle.
+leave its entry behind, and an unrelated resolution afterwards would be reported as a circular dependency.
 
 **Removing a collected entry when a read finds it.** `get()` would remove an entry whose instance has been collected.
 We rejected this because a read that finds one is followed by construction and a `put()` under the same entry, which
@@ -272,13 +286,17 @@ These will change for code that resolves through the container today:
 
 - A circular dependency will throw `CircularDependencyException` instead of exhausting the call stack.
 - A [shared](../GLOSSARY.md#shared) [binding](../GLOSSARY.md#binding) resolved through an [alias](../GLOSSARY.md#alias)
-  more than once will return the same instance. Today each resolution through the alias constructs a new one.
+  more than once will return the same instance. Today each [resolution](../GLOSSARY.md#resolution) through the alias
+  constructs a new one, unless the binding holds an instance, and replaces the instance cached under the
+  [abstract](../GLOSSARY.md#abstract).
 - A resolution through an alias of a binding with no [concrete](../GLOSSARY.md#concrete) class will construct the
-  binding's [abstract](../GLOSSARY.md#abstract). Today the container constructs the class as requested, so resolving an
-  interface that aliases a binding for its implementation throws `NotInstantiableException`.
+  binding's abstract. Today the container constructs the class as requested, so resolving an interface that aliases a
+  binding for its implementation throws `NotInstantiableException`.
+- A resolution through an alias of an alias will construct and share the class the first alias points to. Today the
+  binding lookup finds no binding, and the container constructs the class as requested.
 - A shared resolution made [liminal](../GLOSSARY.md#liminal) by its binding or by a class carrying `Liminal` will return
   the same instance while it is alive. Today each resolution that does not itself ask to be liminal constructs a new
-  one.
+  one, unless the binding holds an instance.
 - A liminal resolution with a name or [qualifier](../GLOSSARY.md#qualifier) will be cached under it, and a liminal
   resolution without one will no longer return an instance built for a [named binding](../GLOSSARY.md#named-binding)
   or [qualified binding](../GLOSSARY.md#qualified-binding). Today every liminal instance of a class is written under
@@ -290,15 +308,27 @@ These will change for code that resolves through the container today:
 - A class with no binding will be shared, as [RFC-0001](0001-dependency-injection-container.md) specifies. Today it is
   constructed again on every resolution.
 - A binding marked lazy will return a [lazy proxy](../GLOSSARY.md#lazy-proxy), as
-  [RFC-0001](0001-dependency-injection-container.md) specifies. Today the container ignores the flag.
+  [RFC-0001](0001-dependency-injection-container.md) specifies, or throw `NotInstantiableException` where the proxy
+  would be made for an interface or an abstract class, such as for a factory binding of an interface. Today the
+  container ignores the flag and resolves such a binding at once.
 - `Lazy` and `Liminal` will apply when carried by the requested class or by the binding's concrete class, including for
-  a binding with an instance or a factory, and `NoResolution` when carried by either class of a resolution the
-  container constructs. Today all three are read only from the class the container constructs, and only when it
-  constructs one. [RFC-0001](0001-dependency-injection-container.md) applies class-level attributes regardless of any
-  binding; the class of an instance a factory returns will not be consulted.
+  a binding with an instance or a factory. Today they are read only from the class the container constructs, and only
+  when it constructs one. [RFC-0001](0001-dependency-injection-container.md) applies them regardless of any binding,
+  but the class of an instance a factory returns will not be consulted.
+- `NoResolution` will apply when carried by either class of a resolution the container constructs, so an abstract
+  carrying it and bound to a concrete class will throw. Today it is read only from the class the container constructs.
+  [RFC-0001](0001-dependency-injection-container.md) applies it only where the binding has no instance, factory or
+  concrete class, so this changes its design as well as the code.
+- A lazy resolution to which `NoResolution` applies, with no instance or factory, will throw when it is requested.
+  Today it returns a lazy proxy, and throws when the proxy is first used.
 - A lazy proxy will be made for the binding's concrete class where it has one. Today it is made for the class as
   requested, and a proxy for an interface or an abstract class throws PHP's own `Error`, where it will throw
   `NotInstantiableException`.
+- A lazy resolution of a class with no properties that could trigger initialisation will be constructed straight away
+  and cached, as [RFC-0001](0001-dependency-injection-container.md) specifies. Today PHP returns an object whose
+  constructor never runs, and it is not cached.
+- A lazy proxy given an instance PHP does not accept for it, such as a factory's instance of a subclass, will throw
+  `DependencyResolutionException` when it is first used. Today PHP throws its own `TypeError`.
 - A resolution given both a name and a qualifier will throw `InvalidResolutionException`. Today the name is used and the
   qualifier is ignored.
 
@@ -321,6 +351,12 @@ These will change for code that resolves through the container today:
   its class consulted for class-level attributes. Alternatives the issues name for the qualifier dimension and the
   stack's key are recorded, the sweeping rejection states its reason, and Backwards compatibility adds the changes the
   revision makes.
+- 2026-10-05: Revised after a third review. A class with no properties that could trigger initialisation is resolved
+  straight away, as in RFC-0001, instead of being given a lazy proxy. A class extending an internal PHP class throws
+  `NotInstantiableException` as interfaces and abstract classes do, and an instance PHP does not accept for a proxy
+  throws `DependencyResolutionException`. A circular dependency is no longer called a cycle, and its message names each
+  entry's name or qualifier class. Backwards compatibility adds the changes to lazy bindings, `NoResolution`, chained
+  aliases and property-less classes, and the Motivation covers aliases, qualifiers and lazy proxies.
 
 ## Sources
 
@@ -340,13 +376,13 @@ These will change for code that resolves through the container today:
 - Issue [#47], Engine - Container - Circular dependency detection, 2026-08-08: the resolution stack, removed however
   the resolution finishes rather than only when it returns, detection observing only eager construction, which it
   proposed to achieve by adding entries on entry, `CircularDependencyException` carrying the chain in order, being final
-  and extending `RuntimeException`, `Lazy` on both classes of a cycle and `Ghost` on a parameter still breaking it,
-  and sequential resolution of one class not counting as a cycle. It keyed the stack by class alone, which this design
-  does not adopt.
+  and extending `RuntimeException`, `Lazy` on both classes of a circular dependency and `Ghost` on a parameter still
+  breaking it, and sequential resolution of one class not counting as a circular dependency. It keyed the stack by class
+  alone, which this design does not adopt.
 - The instance cache keying qualified instances by qualifier class, resolution stack entries being identified the same
-  way as instance cache entries, so that named and qualified child bindings of one abstract are not reported as
-  cycles, and the chain running from the repeated entry's first appearance to its repetition: first written down on
-  2026-09-14.
+  way as instance cache entries, so that named and qualified child bindings of one abstract are not reported as circular
+  dependencies, and the chain running from the repeated entry's first appearance to its repetition: first written down
+  on 2026-09-14.
 - Collected weak entries being kept until the next `put()` replaces them, with removal on read and sweeping rejected:
   first written down on 2026-10-05.
 - Stack entries added only once a resolution is past the cached instance and lazy proxy steps, in place of [#47]'s
@@ -357,8 +393,12 @@ These will change for code that resolves through the container today:
   abstract, the proxy's resolution running again from the alias step, and `NoResolution` checked before a proxy is
   returned; and reading attributes from one class only, a name taking precedence over a qualifier, and resolving
   eagerly when a proxy cannot be made, all rejected: first written down on 2026-10-05.
-- The binding's lazy flag applying at the lazy proxy step, as [RFC-0001](0001-dependency-injection-container.md)
-  specifies, first written into these steps on 2026-10-05.
+- A class extending an internal PHP class throwing `NotInstantiableException`, an instance PHP does not accept for a
+  proxy throwing `DependencyResolutionException`, and the circular dependency message naming each entry's name or
+  qualifier class: first written down on 2026-10-05.
+- The binding's lazy flag applying at the lazy proxy step, and a class with no properties that could trigger
+  initialisation being resolved straight away, as [RFC-0001](0001-dependency-injection-container.md) specifies: first
+  written into these steps on 2026-10-05.
 
 [#43]: https://github.com/thegamepanel/panel/issues/43
 [#44]: https://github.com/thegamepanel/panel/issues/44
