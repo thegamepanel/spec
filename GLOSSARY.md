@@ -10,13 +10,45 @@ The class or interface a binding is registered for and a resolution requests. A 
 
 Another class name that resolves through the same binding as its abstract. The alias map is consulted once, so an alias pointing at another alias is not followed.
 
+## Ambient scope
+
+The module scope at the top of the scope stack, which a resolution runs under.
+
 ## Binding
 
 Registered resolution information for one class or interface in the dependency injection container: the concrete class to construct in its place, an instance, or a factory, together with its aliases, its named and qualified child bindings, and whether it is shared, liminal or lazy.
 
+## Bundled module
+
+A first-party module shipped inside the binary, with its manifest declared in code.
+
+## Capability
+
+Something a module declares it does, such as `CrossRoutes`, checked by whatever enforces it.
+
 ## Catalogue
 
-An immutable, read-only collection consumed at runtime, the counterpart of a registry. The configuration catalogue is sealed from the configuration registry, and the dependency injection container is constructed with a binding catalogue and a resolver catalogue.
+An immutable, read-only collection consumed at runtime, the counterpart of a registry. For example, the configuration catalogue is sealed from the configuration registry, and the dependency injection container is constructed with a binding catalogue and a resolver catalogue.
+
+## Collection
+
+A component asking every enabled module to contribute, at a moment the component chooses, such as at boot or on first use.
+
+## Collector
+
+What a component hands to modules so they can contribute to it, one for each type of contribution, such as routes or middleware.
+
+## Compiled output
+
+A file the engine writes for PHP to include, such as a compiled template or module metadata. It is kept under the compiled root, apart from cached content.
+
+## Compiled SQL
+
+The SQL of a statement or a fragment of one, together with the values bound to it. Composing fragments concatenates their SQL and their values in the same order.
+
+## Compiler
+
+Turns a node into SQL and its bound values by resolving the compiler registered for the node's class, recursing for the nodes it contains.
 
 ## Concrete
 
@@ -46,25 +78,69 @@ Configuration hydrated before the module system runs, because the module system 
 
 The rows returned by a query, fetched one at a time as they are iterated, so that a large result is processed without every row being held in memory at once. Its rows can be iterated once.
 
+## Cycle
+
+A unit of work that whatever drives the dependency injection container opens and closes around it, such as handling a request, running a job or a scheduler tick. An instance with a cycle lifetime is kept until its cycle closes.
+
 ## Dependency
 
 A parameter the dependency injection container has to supply, described by its name, type, default, and the attributes that affect its resolution.
+
+## Disposal
+
+Releasing what a cycle instance holds when its cycle closes, such as an open transaction, a buffered log writer or an unsaved session.
 
 ## Drop-in
 
 A TOML file in `config.d`, merged over the main configuration file in filename order. Where both values are arrays and neither is a non-empty list they merge recursively, and otherwise the drop-in's value replaces the one already there.
 
+## Effective liminality
+
+Whether a resolution is liminal, worked out from every source that can make it so, such as the resolution itself, its binding and its class.
+
+## Engine
+
+The part of the panel that modules are built on. It shares one repository with those modules, the entry point and the build that produces the binary.
+
+## Entity identifier
+
+An entity's identity: a ULID with a type of its own for each entity, so that one entity's identifier cannot be passed where another's is expected.
+
+## Entity map
+
+The entities loaded or saved during one unit of work, each held with the snapshot it came from. Two reads of the same row give the same object.
+
 ## Environment variable
 
 A value supplied through the process environment or an env file. Environment variables are read during bootstrap, held by `Env`, and interpolated into the configuration tree as it loads.
+
+## Explicit scope
+
+A module scope named at a parameter, such as with the `Scoped` attribute, used for that one dependency instead of the ambient scope.
 
 ## Expression
 
 An object that produces SQL, with a `?` placeholder for each bound value, together with the values bound to those placeholders. Every object in the query builder and the schema builder is one, and an expression containing other expressions builds its SQL from theirs and gathers their bound values in the same order.
 
+## External module
+
+A module installed as a Composer package of type `tgp-module` into the modules directory, with its metadata declared in its `composer.json`.
+
 ## Ghost object
 
 An object of the final class that the dependency injection container creates uninitialised. When it is first accessed, its constructor runs on that same object through the container, and from then on it is the instance itself rather than a stand-in for one. A dependency is resolved as a ghost object with the `Ghost` attribute.
+
+## Given filesystem
+
+A filesystem constructed by whatever composes the engine and handed to the filesystem catalogue, such as the configuration, data or cache filesystem.
+
+## Handler reference
+
+How a listener is registered and stored without being constructed: the name of an invokable class, or a class name and a method name.
+
+## Instance cache
+
+A store of shared instances, keyed by class, and by name or qualifier class where a resolution has one. Each holds its instances either strongly or through weak references.
 
 ## Invocation
 
@@ -74,9 +150,21 @@ Calling a callable, method or constructor with its parameters supplied by the de
 
 A stand-in that the dependency injection container returns in place of an instance not yet resolved. When the proxy is first used, the container resolves the real instance, and the proxy forwards to it from then on, remaining a proxy.
 
+## Lifetime
+
+How long the dependency injection container keeps an instance it has resolved: for the life of the worker, for one cycle, or not at all, a new instance being resolved every time.
+
 ## Liminal
 
 Describes an instance that is shared but held by the dependency injection container through a weak reference, so that garbage collection can clear it once nothing else uses it, after which the next resolution produces a new instance.
+
+## Manifest
+
+The resolved metadata describing one module, such as its identifier, version, declared capabilities and registrar class.
+
+## Match set
+
+The listeners that match one concrete event class, in the order they were registered. It is worked out the first time an event of that class is dispatched, and kept.
 
 ## Module
 
@@ -86,13 +174,41 @@ The unit the panel is extended with, first-party and third-party alike, and the 
 
 A module's name, taken from its configuration file in `modules-enabled` without the `.toml` extension. An identifier containing a dot throws.
 
+## Module scope
+
+The module a binding registry is created for. Each binding records the module scope it was registered under.
+
+## Module source
+
+Where every module's manifest and registrar metadata come from, whether compiled ahead of time or reflected.
+
 ## Named binding
 
 A child binding of an abstract, selected by a string name. A dependency selects one with the `Named` attribute, and a resolution with `named()`.
 
+## Node
+
+An object describing part of a statement, such as a query, a column or an index, which a compiler turns into SQL.
+
+## Owner
+
+The module that registered a binding. A binding the engine registers itself has no owner.
+
+## Panel context
+
+The part of the panel a route belongs to, which decides its URL prefix.
+
 ## Primary connection
 
 The connection used whenever no connection name is given. Its name is configured, and a connection must be configured under that name.
+
+## Primitive
+
+A thin wrapper, with no policy, over something PostgreSQL provides that a later subsystem needs, such as notifications or advisory locks.
+
+## Provider
+
+An object injected in place of an instance, which resolves that class each time it is asked, against whichever cycle is open at that moment. A longer-lived object uses one to reach an instance belonging to the current cycle.
 
 ## Qualified binding
 
@@ -106,9 +222,17 @@ An attribute implementing the `Qualifier` contract that selects a qualified bind
 
 An expression that is a complete query, such as a select or an insert, rather than a fragment such as `col = ?`.
 
+## Read model
+
+An object carrying the fields one page needs, passed to a template in place of an entity.
+
+## Registrar
+
+A module's entry class, and the metadata reflected from it describing which of its methods do what.
+
 ## Registry
 
-The mutable counterpart of a catalogue, used while things are being registered. Configuration registrations are sealed into the configuration catalogue, and bindings and resolvers each have a registry alongside their catalogue.
+The mutable counterpart of a catalogue, used while things are being registered. For example, configuration registrations are sealed into the configuration catalogue, and bindings and resolvers each have a registry alongside their catalogue.
 
 ## Relative path
 
@@ -116,7 +240,11 @@ A path beneath a root, joined onto it by `Paths`. The root's trailing separator 
 
 ## Resolution
 
-Producing an instance of a class through the dependency injection container, from a binding or automatically from its constructor, and the object that describes such a request: the class, any constructor arguments, a name or qualifier, and whether the result is lazy or liminal.
+Producing an instance of a class through the dependency injection container, from a binding or automatically from its constructor. Also the object that describes such a request, holding details such as the class, any constructor arguments, a name or qualifier, and whether the result is lazy or liminal.
+
+## Resolution stack
+
+The resolutions the dependency injection container is constructing eagerly, in the order it reached them. A resolution whose entry is already on the stack is circular.
 
 ## Resolvable attribute
 
@@ -142,6 +270,10 @@ One row of a result, holding its values keyed by column name, with typed accesso
 
 An expression that is a complete schema statement, such as creating a table.
 
+## Scope stack
+
+The module scopes the dependency injection container currently has pushed, innermost last. It is emptied when a cycle closes.
+
 ## Section
 
 The part of the configuration tree a configuration object is hydrated from. Dots separate the segments of a section path.
@@ -149,3 +281,39 @@ The part of the configuration tree a configuration object is hydrated from. Dots
 ## Shared
 
 Describes an instance that is resolved once, cached by the dependency injection container, and returned on every later resolution. Instances are shared by default, and one that is not shared is never cached.
+
+## Slot
+
+A named point in a template that other code contributes to. A contribution receives the payload the template declares for the slot and nothing else.
+
+## Snapshot
+
+The column data an entity was last loaded from or saved as, which saving compares against to find what changed.
+
+## Source chain
+
+The registered template sources in precedence order, walked until a template reference resolves.
+
+## Statement list
+
+The ordered statements one schema node compiles into, such as a table followed by its separate indexes and comments, executed in order inside one transaction. The exceptions are creating an index concurrently and creating a database, neither of which can run inside a transaction.
+
+## Store
+
+What finds, saves and deletes entities of one type, turning a row into an entity and an entity back into columns.
+
+## Superseded record
+
+A session record replaced when its identifier is regenerated, kept for a short configurable window so that requests already in flight still resolve.
+
+## Template namespace
+
+Who owns a template, such as `main` for core or `backups` for a module.
+
+## Template reference
+
+A template's name in the form `namespace:path`, which names it without saying which file provides it.
+
+## Template source
+
+A named set of pairs, each mapping a template namespace to a path, registered as one unit. A later source wins over an earlier one.
