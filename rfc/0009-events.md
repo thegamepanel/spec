@@ -13,56 +13,40 @@ obsoletes: []
 
 ## Abstract
 
-A synchronous, in-process event dispatcher. Any object is an event, and listeners are registered against an event
-type as references, sealed into an immutable catalogue. A listener matches an event it is typed against, or any
-subtype of it, and the matched set for a concrete event class is worked out on its first dispatch and kept. An event
-may opt into cancellation, which halts propagation.
+We will add a synchronous, in-process event dispatcher in which any object can be an event. Listeners will be registered
+against an event type by [handler reference](../GLOSSARY.md#handler-reference) and sealed into an immutable
+[catalogue](../GLOSSARY.md#catalogue). A listener will receive every event of its type or a subtype of it, and an event
+will be able to opt into cancellation, which stops any later listener from running.
 
 ## Motivation
 
-Something that happens in one part of the panel often matters to another. A server being deleted matters to whatever
-cleans up after it, and to whatever writes an audit trail, neither of which the code deleting the server should have
-to know about.
+Something that happens in one part of the panel often matters to another. When a server is deleted, whatever cleans
+up after it needs to know, and so does whatever writes an audit trail, but the code deleting the server should not
+have to know about either.
 
-Modules make that sharper. A module needs to react to what the engine and other modules do, without either side
-depending on the other.
+This matters more for a [module](../GLOSSARY.md#module), which has to react to what the [engine](../GLOSSARY.md#engine)
+and other modules do without either side depending on the other.
 
 ## Proposal
 
-### Concepts
-
-| Term | Meaning |
-|---|---|
-| Event | Any object, dispatched so that whatever is interested can act on it. |
-| Listener | One handler for one event type. The only thing the dispatcher stores and calls. |
-| Subscriber | A class declaring several listeners through attributes on its methods. |
-| Handler reference | How a listener is stored: an invokable class, or a class and a method name. |
-| Match set | The listeners that match one concrete event class, in registration order. |
-
-### Components
-
-| Component | Responsibility |
-|---|---|
-| `EventRegistry` | Mutable. Collects registrations of an event type against a handler reference. |
-| `EventCatalogue` | Immutable. The registrations the dispatcher reads, sealed from the registry. |
-| `EventDispatcher` | Dispatches an event to every matching listener. |
-| `Cancellable` | Contract an event implements to be cancellable. |
-
 ### Events
 
-Any object is an event. There is no marker interface to implement and nothing to extend: the class is the identity.
+Any object will be an event. There will be no marker interface to implement and nothing to extend: the event's class
+is its identity.
 
-Naming carries the meaning. The past tense says it has happened and cannot be stopped, such as `ServerDeleted`. The
-present participle says it is about to happen and may be cancellable, such as `ServerDeleting`.
+The class name will carry the meaning. A name in the past tense, such as `ServerDeleted`, says the thing has happened
+and cannot be stopped. A name in the present participle, such as `ServerDeleting`, says it is about to happen, and the
+event may be cancellable.
 
-An event that wants something back from its listeners carries whatever collects it, such as a registry or a builder,
-and listeners call into that. The dispatcher gathers nothing and aggregates nothing.
+An event that needs something back from its listeners will carry an object that collects it, such as a
+[registry](../GLOSSARY.md#registry) or a builder, and listeners will call into that. The dispatcher will not gather or
+combine anything itself.
 
 ### Registration
 
-Registration follows the pattern in
-[ADR-0003](../adr/0003-mutable-registries-are-sealed-into-immutable-catalogues.md): `EventRegistry` collects, and
-`seal()` produces the `EventCatalogue` the dispatcher reads. Registering after the registry has been sealed throws.
+Registration will follow [ADR-0003](../adr/0003-mutable-registries-are-sealed-into-immutable-catalogues.md): an
+`EventRegistry` will collect registrations, and its `seal()` method will produce the `EventCatalogue` the dispatcher
+reads. Registering a listener after the [registry](../GLOSSARY.md#registry) has been sealed will throw.
 
 ```php
 $registry->listen(ServerDeleted::class, PurgeServerFiles::class);
@@ -76,11 +60,13 @@ $catalogue = $registry->seal();
 | `listen(string $event, string\|array $handler)` | Registers an invokable class, or a class and method, as a listener for the event type. |
 | `seal(): EventCatalogue` | Produces the immutable catalogue and closes registration. |
 
-A registration holds a reference, never an instance. A listener for an event that never fires is never constructed.
+A listener will be one handler for one event type, and the only thing the dispatcher stores and calls. A registration
+will hold a [handler reference](../GLOSSARY.md#handler-reference), never an instance. A listener for an event that never
+fires will never be constructed.
 
-A subscriber, a class declaring several listeners through attributes on its methods, is expanded into registrations
-by whatever reads those attributes. That is reflection over attributes at registration time, which belongs to the
-module system, and the dispatcher has no concept of a subscriber.
+A subscriber is a class that declares several listeners through attributes on its methods. It will be expanded into
+registrations by whatever reads those attributes. That is reflection over attributes at registration time, which belongs
+to the [module](../GLOSSARY.md#module) system, and the dispatcher will have no concept of a subscriber.
 
 ### Dispatch
 
@@ -88,28 +74,31 @@ module system, and the dispatcher has no concept of a subscriber.
 public function dispatch(object $event): object;
 ```
 
-The event is passed to each matching listener in turn, in the order the listeners were registered, and then returned.
-The dispatcher returns the event itself, so anything a caller wants back it reads from the event.
+The `EventDispatcher` will pass the event to each listener that matches it, one at a time and in the order the listeners
+were registered, and then return the event. Anything the caller wants back, it will read from the event.
 
-A listener is resolved through the container, per [RFC-0001](0001-dependency-injection-container.md), the first time
-an event it matches is dispatched, and is `Process` lifetime, per [RFC-0007](0007-binding-lifetimes.md). A listener
-holds no state belonging to a request, and reaches anything that does through a provider.
+Each listener will be resolved through the dependency injection container, as
+[RFC-0001](0001-dependency-injection-container.md) describes, the first time an event it matches is dispatched.
+Listeners will have the `Process` [lifetime](../GLOSSARY.md#lifetime) from [RFC-0007](0007-binding-lifetimes.md). A
+listener will hold no state belonging to a request, and will reach anything that does through a
+[provider](../GLOSSARY.md#provider).
 
 ### Matching
 
-A listener matches an event that is the type it is registered against, extends it, or implements it. A listener
-registered against `object` matches every event.
+A listener will match an event whose class is the type the listener is registered against, or extends or implements
+that type. A listener registered against `object` will match every event.
 
-A marker interface on a set of events, with one listener registered against that interface, therefore reaches every
-event carrying it, including events defined later by a module.
+One listener registered against a marker interface will therefore reach every event that implements it, including
+events a [module](../GLOSSARY.md#module) defines later.
 
-Matching cannot be worked out in advance. Any object is an event, so the set of concrete event classes is open and
-unknown until one is dispatched. The match set for a concrete class is worked out on its first dispatch and kept for
-the life of the worker, so later dispatches of that class read it directly.
+Matching cannot be worked out in advance. Because any object can be an event, the set of event classes is open, and a
+class is not known until an instance of it is dispatched. The [match set](../GLOSSARY.md#match-set) for a concrete class
+will be worked out on its first dispatch and kept for the life of the worker, so later dispatches of that class will
+read it directly.
 
 ### Cancellation
 
-An event opts into cancellation by implementing `Cancellable`:
+An event will opt into cancellation by implementing `Cancellable`:
 
 ```php
 interface Cancellable
@@ -122,56 +111,61 @@ interface Cancellable
 }
 ```
 
-Cancelling halts propagation: no listener after the one that cancelled runs. `dispatch()` returns the event, and the
-caller reads `isCancelled()` and `reason()` to find out what happened and why.
-
-Because propagation stops at the first cancellation, the first reason is the one the event carries.
+Cancelling an event will stop propagation: no listener after the one that cancelled it will run. `dispatch()` will still
+return the event, and the caller will read `isCancelled()` and `reason()` to find out whether it was cancelled and why.
+Because propagation stops at the first cancellation, the event will carry the first reason given.
 
 ### Listeners that throw
 
-An exception from a listener propagates. The dispatcher catches nothing, and no listener after the one that threw
-runs.
+An exception thrown by a listener will propagate. The dispatcher will catch nothing, and no listener after the one that
+threw will run.
 
-What that means for the caller is the caller's own concern. Work inside a transaction is rolled back by that
-transaction. Whatever dispatches an event around a boundary it must close, such as a driver closing a cycle, does so
-inside its own `try`/`finally`, so a throwing listener cannot skip the teardown.
+What that means for the caller is the caller's concern. Work inside a transaction is rolled back by that
+transaction. Code that dispatches an event inside something it must close, such as a [cycle](../GLOSSARY.md#cycle), does
+the closing in its own `try`/`finally`, so a listener that throws cannot skip it.
 
 ### Errors
 
-| Exception | Thrown when |
-|---|---|
-| `EventLifecycleException` | Registration is attempted after the registry has been sealed. |
-
-A handler reference that cannot be resolved fails when the listener is first needed, with the exception the container
-raises, per [RFC-0001](0001-dependency-injection-container.md).
+Registering a listener after the registry has been sealed will throw `EventLifecycleException`. A
+[handler reference](../GLOSSARY.md#handler-reference) that cannot be resolved will fail when the listener is first
+needed, with the exception the container raises, as [RFC-0001](0001-dependency-injection-container.md) describes.
 
 ### Out of scope
 
-- **Which events exist.** What is dispatched, and what an event carries, is decided where it is dispatched.
-- **Subscribers and attribute extraction.** Reading listener attributes off a class belongs to the module system.
-- **Listener priority.** Listeners run in registration order, and nothing reorders them.
-- **Durable delivery.** Delivering an event beyond the process, with an outbox for durability, is a separate
-  component built on this one.
-- **An audit trail.** Separate again, and most likely a module.
-- **Collecting contributions from modules.** A collector asks every module for contributions when a component
-  chooses; an event fires at a moment in a flow. They are different mechanisms.
-- **Dispatching from the container.** Whatever owns a boundary dispatches around it. The container never dispatches.
+- **Which events exist.** Code that dispatches an event decides what the event is and what it carries.
+- **Subscribers and reading their attributes.** Reading listener attributes off a class belongs to the
+  [module](../GLOSSARY.md#module) system.
+- **Listener priority.** Listeners will run in the order they were registered, and nothing will reorder them.
+- **Durable delivery.** Delivering an event outside the process, with an outbox to make delivery durable, will be a
+  separate component built on this one.
+- **An audit trail.** Also separate, and most likely a module.
+- **Collecting contributions from modules.** A collector asks every module for contributions when a component chooses
+  to; an event fires at a moment in a flow. They are different mechanisms.
+- **Dispatching from the container.** Whatever owns a boundary dispatches events around it. The container never
+  dispatches an event.
 
 ## Alternatives considered
 
-**Working out every match when the catalogue is sealed.** The set of concrete event classes is open, because any
-object is an event, so there is nothing complete to precompute. Matching per concrete class on first dispatch, and
-keeping the result, gives the same saving without needing the set in advance.
+The decision this design rests on is recorded separately, with the alternatives it rejected:
+[ADR-0003](../adr/0003-mutable-registries-are-sealed-into-immutable-catalogues.md), under which mutable registries are
+sealed into immutable catalogues.
+
+**Working out every match when the catalogue is sealed.** We rejected this because any object can be an event, so the
+set of event classes is open and there is nothing complete to compute in advance. Working out the matches for each
+concrete class on its first dispatch, and keeping them, saves the same work without needing the set in advance.
 
 No other alternatives were weighed.
 
 ## Backwards compatibility
 
-Nothing breaks. No event dispatcher exists before this.
+Nothing will break. There is no event dispatcher today.
 
 ## Open questions
 
 ## Changelog
+
+- 2026-10-05: Reworded in the readable house style, and the project's own vocabulary linked to the glossary. The
+  design is unchanged.
 
 ## Sources
 

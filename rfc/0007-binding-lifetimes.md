@@ -13,55 +13,32 @@ obsoletes: []
 
 ## Abstract
 
-A binding's lifetime replaces its shared flag with three states: `Process`, resolved once and held until the worker
-restarts; `Cycle`, resolved once per cycle and discarded when the cycle closes; and `Transient`, a new instance on
-every resolution. The container opens and closes cycles for whatever drives it, disposes of cycle instances that hold
-resources when a cycle closes, and injects providers where a longer-lived object needs an instance from the current
-cycle.
+We will replace the shared flag on a [binding](../GLOSSARY.md#binding) with a [lifetime](../GLOSSARY.md#lifetime) of
+three states: `Process`, resolved once and held until the worker restarts; `Cycle`, resolved once per
+[cycle](../GLOSSARY.md#cycle) and discarded when the cycle closes; and `Transient`, a new instance on every resolution.
+The container will open and close cycles for whatever drives it, and dispose of cycle instances that hold resources when
+a cycle closes. Where a longer-lived object needs an instance from the current cycle, the container will inject a
+[provider](../GLOSSARY.md#provider).
 
 ## Motivation
 
-The container records whether a binding is shared, and nothing else about how long an instance lasts. A shared
-instance is cached for the life of the container.
+The container records whether a [binding](../GLOSSARY.md#binding) is [shared](../GLOSSARY.md#shared), and nothing else
+about how long an instance lasts. A shared instance is cached for the life of the container.
 
-The panel runs as a long-lived worker, per
-[ADR-0009](../adr/0009-the-panel-runs-as-a-frankenphp-worker-in-a-single-binary.md). When a PHP process lasted one
-request, a shared instance lasted one request. In a worker, the same binding lasts until the worker restarts. The
-lifetime of every binding changed when the runtime was chosen, without any binding changing.
+The panel runs as a long-lived worker, as
+[ADR-0009](../adr/0009-the-panel-runs-as-a-frankenphp-worker-in-a-single-binary.md) decides. When a PHP process lasted
+one request, a shared instance lasted one request. In a worker, the same binding lasts until the worker restarts. The
+[lifetime](../GLOSSARY.md#lifetime) of every binding changed when the runtime was chosen, without any binding changing.
 
 There is no way to declare one instance per request, discarded afterwards, which anything holding the identity of a
 request needs. The same need arises for a job taken by a queue worker, and for a tick of the scheduler.
 
 ## Proposal
 
-### Concepts
-
-| Term | Meaning |
-|---|---|
-| Lifetime | How long a resolved instance is kept: `Process`, `Cycle` or `Transient`. |
-| Cycle | A unit of work opened and closed around the container by whatever drives it, such as a request, a job or a tick. |
-| Process lifetime | Resolved once, and held until the worker restarts. |
-| Cycle lifetime | Resolved once per cycle, and discarded when the cycle closes. |
-| Transient lifetime | Resolved anew on every resolution, and never cached. |
-| Provider | An object that resolves one class each time it is asked, against the cycle open at that moment. |
-| Disposal | Releasing what a cycle instance holds, when its cycle closes. |
-
-### Components
-
-| Component | Responsibility |
-|---|---|
-| `Lifetime` | Enum of `Process`, `Cycle` and `Transient`. |
-| `BindingBuilder`, `Binding` | Carry a binding's lifetime and its disposal callback, in place of the shared flag. |
-| `PerProcess`, `PerCycle` | Class attributes declaring the lifetime of a class. |
-| `Container` | Opens and closes cycles, caches cycle instances separately, and disposes of them when a cycle closes. |
-| `Provider` | Contract for resolving one class on demand. |
-| `Provide` | Resolvable attribute naming the class a `Provider` parameter provides. |
-| `ProviderResolver` | The resolver paired with `Provide`. |
-| `Disposable` | Contract for an instance that releases what it holds when its cycle closes. |
-| `LifetimeException` | Thrown when a lifetime or a cycle is used incorrectly. |
-| `DisposalException` | Thrown when one or more disposals fail. |
-
 ### Lifetimes
+
+Every [resolution](../GLOSSARY.md#resolution) will have a [lifetime](../GLOSSARY.md#lifetime), one of the three cases of
+the `Lifetime` enum:
 
 | Lifetime | Duration | Cached |
 |---|---|---|
@@ -69,9 +46,9 @@ request needs. The same need arises for a job taken by a queue worker, and for a
 | `Cycle` | Resolved once per cycle, discarded when the cycle closes. | In the cycle cache. |
 | `Transient` | A new instance on every resolution. | Never. |
 
-A resolution's lifetime is decided in this order:
+A resolution's lifetime will be decided in this order:
 
-1. A lifetime declared on its binding.
+1. A lifetime declared on its [binding](../GLOSSARY.md#binding).
 2. A lifetime declared by its class, with `PerProcess` or `PerCycle`.
 3. Otherwise, `Process` for a class with a binding, and `Transient` for a class without one.
 
@@ -89,9 +66,10 @@ $registry->bind(Report::class)->transient();                                    
 | `transient()` | Declares the binding `Transient`. It replaces `notShared()`. |
 | `disposeUsing(Closure $callback)` | Declares how an instance of a `Cycle` binding is disposed, as described under Disposal. |
 
-The shared flag is removed, not kept alongside the lifetime.
+`BindingBuilder` and `Binding` will carry the [lifetime](../GLOSSARY.md#lifetime) of a [binding](../GLOSSARY.md#binding)
+and its disposal callback in place of the shared flag. The shared flag will be removed, not kept alongside the lifetime.
 
-A class declares its own lifetime with an attribute, which applies whether or not it has a binding, unless its
+A class will declare its own lifetime with an attribute, which will apply whether or not it has a binding, unless its
 binding declares one:
 
 ```php
@@ -102,20 +80,21 @@ final class CurrentUser {}
 final class GameCatalogue {}
 ```
 
-`PerProcess` and `PerCycle` are markers tested only for presence, memoised with the other class attributes, per
-[ADR-0014](../adr/0014-class-level-attributes-are-memoised-as-presence-flags.md). There is no attribute for
-`Transient`, since a class with no binding is `Transient` already.
+`PerProcess` and `PerCycle` will be markers tested only for presence, memoised with the other class attributes, as
+[ADR-0014](../adr/0014-class-level-attributes-are-memoised-as-presence-flags.md) decides. There will be no attribute for
+`Transient`, since a class with no binding will be `Transient` already.
 
 ### Liminality
 
-Liminality applies to `Process` lifetime alone:
+Liminality will apply to the `Process` [lifetime](../GLOSSARY.md#lifetime) alone:
 
-- A liminal `Process` resolution is held in the weak cache.
-- A liminal resolution that would otherwise be `Transient` is held weakly as `Process`.
-- A liminal resolution of a `Cycle` binding or class stays `Cycle`, and its liminality is ignored.
+- A [liminal](../GLOSSARY.md#liminal) `Process` resolution will be held in the weak cache.
+- A liminal resolution that would otherwise be `Transient` will be held weakly as `Process`.
+- A liminal resolution of a `Cycle` binding or class will stay `Cycle`, and its liminality will be ignored.
 
-There is no weak cycle cache. A weakly held instance lasts as long as something else holds it, and a cycle instance
-lasts until its cycle closes; combining them gives whichever ends first, and each bound makes the other redundant.
+There will be no weak cycle cache. A weakly held instance lasts as long as something else holds it, and a
+[cycle](../GLOSSARY.md#cycle) instance will last until its cycle closes. Combining them would give whichever ends first,
+and each bound would make the other redundant.
 
 ### Cycles
 
@@ -125,15 +104,17 @@ lasts until its cycle closes; combining them gives whichever ends first, and eac
 | `closeCycle(): void` | Disposes of the cycle's instances, discards them, and closes the cycle. Throws if none is open. |
 | `inCycle(): bool` | Returns whether a cycle is open. |
 
-The container does not know what a cycle represents. Whatever drives it opens and closes cycles: the HTTP worker
-around each request, a queue worker around each job, and the scheduler around each tick.
+The container will not know what a [cycle](../GLOSSARY.md#cycle) represents. Whatever drives it will open and close
+cycles, such as a worker serving HTTP around each request, a queue worker around each job, or a scheduler around each
+tick.
 
-Cycles do not nest. Resolving a `Cycle` lifetime with no cycle open throws, rather than returning an instance with
-the wrong identity.
+Cycles will not nest. Resolving a `Cycle` [lifetime](../GLOSSARY.md#lifetime) with no cycle open will throw, rather than
+return an instance with the wrong identity.
 
 ### Caches
 
-The container holds three instance caches, as described in [RFC-0006](0006-container-improvements.md):
+The container will hold three caches of the [instance cache](../GLOSSARY.md#instance-cache) type described in
+[RFC-0006](0006-container-improvements.md):
 
 ```php
 private InstanceCache $instances        = InstanceCache::strong();
@@ -141,7 +122,7 @@ private InstanceCache $liminalInstances = InstanceCache::weak();
 private InstanceCache $cycleInstances   = InstanceCache::strong();
 ```
 
-One method selects the cache, and both reading and writing call it:
+One method will select the cache, and both reading and writing will call it:
 
 ```php
 private function cacheFor(bool $liminal, Lifetime $lifetime): ?InstanceCache
@@ -155,23 +136,27 @@ private function cacheFor(bool $liminal, Lifetime $lifetime): ?InstanceCache
 }
 ```
 
-In the resolution steps of [RFC-0006](0006-container-improvements.md), the lifetime is decided alongside
-liminality, the cached instance step reads from the cache selected for both, and the sharing step writes to it. A
-`Transient` resolution reads from and writes to no cache.
+In the [resolution](../GLOSSARY.md#resolution) steps of [RFC-0006](0006-container-improvements.md), the
+[lifetime](../GLOSSARY.md#lifetime) will be decided alongside liminality. The cached instance step will read from the
+cache selected for both, and the sharing step will write to it. A `Transient` resolution will read from and write to no
+cache.
 
-Closing a cycle replaces the cycle cache with a new one once its instances are disposed of, so they are discarded as
-one object rather than removed one by one. `InstanceCache` itself is unchanged.
+Closing a [cycle](../GLOSSARY.md#cycle) will replace the cycle cache with a new one once its instances are disposed of,
+so they will be discarded as one object rather than removed one by one. `InstanceCache` itself will not change.
 
 ### A process instance depending on a cycle instance
 
-A `Process` object whose constructor takes a `Cycle` instance resolves it once, in the first cycle, and holds it for
-the life of the worker, so every later cycle sees the first cycle's instance. A lazy proxy or ghost of a `Cycle`
-instance has the same result: it resolves once, in whichever cycle first uses it.
+A `Process` object whose constructor takes a `Cycle` instance will resolve it once, in the first
+[cycle](../GLOSSARY.md#cycle), and hold it for the life of the worker, so every later cycle will see the first cycle's
+instance. A [lazy proxy](../GLOSSARY.md#lazy-proxy) or [ghost object](../GLOSSARY.md#ghost-object) of a `Cycle` instance
+will have the same result: it will resolve once, in whichever cycle first uses it.
 
-The container does not reject this. A longer-lived object that needs an instance from the current cycle takes a
-provider instead.
+The container will not reject this. A longer-lived object that needs an instance from the current cycle will take a
+[provider](../GLOSSARY.md#provider) instead.
 
 ### Providers
+
+A [provider](../GLOSSARY.md#provider) will implement the `Provider` contract:
 
 ```php
 interface Provider
@@ -194,26 +179,28 @@ final class AuditLogger
 }
 ```
 
-`Provide` is a resolvable attribute naming the class to provide, and `ProviderResolver` is its resolver, registered
-alongside `GhostResolver`, per [RFC-0001](0001-dependency-injection-container.md). The resolver builds a
-`Provider` for the class and injects it, so the consuming class never sees the container.
+`Provide` will be a [resolvable attribute](../GLOSSARY.md#resolvable-attribute) naming the class to provide, and
+`ProviderResolver` its [resolver](../GLOSSARY.md#resolver), registered alongside `GhostResolver`, as
+[RFC-0001](0001-dependency-injection-container.md) describes. The resolver will build a `Provider` for the class and
+inject it, so the consuming class never sees the container.
 
-`Provider::get()` resolves the class each time it is called, against whichever cycle is open then, so nothing is
-captured. PHP has no generics, so it returns `object`; `Provider<CurrentUser>` exists only as a docblock for static
-analysis, and the attribute is the source of truth. A test can substitute its own `Provider` with no container
-involved.
+`Provider::get()` will resolve the class each time it is called, against whichever [cycle](../GLOSSARY.md#cycle) is open
+then, so nothing will be captured. PHP has no generics, so it will return `object`; `Provider<CurrentUser>` will exist
+only as a docblock for static analysis, and the attribute will be the source of truth. A test will be able to substitute
+its own `Provider` with no container involved.
 
-`ProviderResolver` checks, when it builds the provider, that the provided class has a binding or can be constructed,
-without resolving it, and throws if not. A broken binding therefore fails when the consuming class is built, not on
-the first call to `get()`.
+`ProviderResolver` will check, when it builds the provider, that the provided class has a
+[binding](../GLOSSARY.md#binding) or can be constructed, without resolving it, and will throw if not. A broken binding
+will therefore fail when the consuming class is built, not on the first call to `get()`.
 
-Providers are for an object needing an instance with a shorter lifetime than its own. They are not a general way to
-defer resolution.
+Providers will be for an object needing an instance with a shorter [lifetime](../GLOSSARY.md#lifetime) than its own.
+They will not be a general way to defer resolution.
 
 ### Disposal
 
-A `Cycle` instance holding a resource, such as an open transaction, a buffered log writer or an unsaved session, is
-disposed of when its cycle closes. Disposal is declared in either of two ways:
+A `Cycle` instance holding a resource, such as an open transaction, a buffered log writer or an unsaved session, will be
+disposed of when its [cycle](../GLOSSARY.md#cycle) closes. [Disposal](../GLOSSARY.md#disposal) will be declared in
+either of two ways:
 
 ```php
 interface Disposable
@@ -228,12 +215,14 @@ $registry->bind(Session::class)
     ->disposeUsing(fn (Session $session) => $session->save());
 ```
 
-- **`Disposable`**, implemented by the class, suits a class that knows what it holds, with or without a binding.
-- **`disposeUsing()`**, declared on the binding, suits a class that cannot or should not implement a container
-  contract, such as one from a third-party library. The callback receives the instance. Where a binding declares a
-  callback, the callback is used instead of `dispose()`.
+- **`Disposable`**, implemented by the class, will suit a class that knows what it holds, with or without a
+  [binding](../GLOSSARY.md#binding).
+- **`disposeUsing()`**, declared on the binding, will suit a class that cannot or should not implement a container
+  contract, such as one from a third-party library. The callback will receive the instance. Where a binding declares a
+  callback, the callback will be used instead of `dispose()`.
 
-`disposeUsing()` is only valid on a `Cycle` binding, and declaring it on any other lifetime throws.
+`disposeUsing()` will only be valid on a `Cycle` binding, and declaring it on any other
+[lifetime](../GLOSSARY.md#lifetime) will throw.
 
 When a cycle closes:
 
@@ -245,7 +234,7 @@ When a cycle closes:
 4. The cycle cache is replaced and the cycle closes.
 5. If any disposal threw, a `DisposalException` carrying every failure is thrown.
 
-`Process` instances are not disposed of when a cycle closes.
+`Process` instances will not be disposed of when a cycle closes.
 
 ### Errors
 
@@ -255,12 +244,12 @@ When a cycle closes:
 | `DisposalException` | `RuntimeException` | One or more disposals failed when a cycle closed. It carries every failure. |
 | `DependencyResolutionException` | `RuntimeException` | The class a `Provider` provides has no binding and cannot be constructed. |
 
-Every exception implements `ContainerException`.
+Every exception will implement `ContainerException`.
 
 ### Out of scope
 
-- **Opening and closing cycles.** The HTTP worker, the queue worker and the scheduler do that, and each belongs to
-  its own design.
+- **Opening and closing cycles.** The HTTP worker, the queue worker and the scheduler do that, and each belongs to its
+  own design.
 - **Disposing of `Process` instances** when the worker shuts down, which belongs to bootstrapping.
 - **Validating the dependency graph.** A `Process` object taking a `Cycle` instance is not rejected.
 
@@ -268,38 +257,43 @@ Every exception implements `ContainerException`.
 
 The decisions this design rests on are recorded separately:
 
-- running as a long-lived worker, in
-  [ADR-0009](../adr/0009-the-panel-runs-as-a-frankenphp-worker-in-a-single-binary.md)
+- running as a long-lived worker, in [ADR-0009](../adr/0009-the-panel-runs-as-a-frankenphp-worker-in-a-single-binary.md)
 - memoising class-level attributes as presence flags, in
   [ADR-0014](../adr/0014-class-level-attributes-are-memoised-as-presence-flags.md)
 
-**Naming the middle lifetime `Request`.** HTTP opens a cycle for each request, but a queue worker opens one for each
-job and the scheduler for each tick. `Request` would put HTTP vocabulary into the container, and read wrongly for the
-other two.
+**Naming the middle lifetime `Request`.** We rejected this because HTTP opens a [cycle](../GLOSSARY.md#cycle) for each
+request, but a queue worker opens one for each job and the scheduler for each tick. `Request` would put HTTP
+vocabulary into the container, and read wrongly for the other two.
 
-**Keeping the shared flag alongside the lifetime.** Two ways of saying the same thing would disagree.
+**Keeping the shared flag alongside the lifetime.** We rejected this because two ways of saying the same thing would
+disagree.
 
-**Resolving a `Cycle` lifetime outside a cycle as `Transient`.** It would produce an instance with the wrong identity,
-and no error.
+**Resolving a `Cycle` lifetime outside a cycle as `Transient`.** We rejected this because it would produce an instance
+with the wrong identity, and no error.
 
-**Nesting cycles.** A second cycle opened inside the first would need a stack of cycle caches, and nothing needs one.
+**Nesting cycles.** We rejected this because a second cycle opened inside the first would need a stack of cycle
+caches, and nothing needs one.
 
-**Partitioning `InstanceCache` by lifetime.** A third cache keeps `InstanceCache` unchanged, and closing a cycle
-discards one object instead of walking entries.
+**Partitioning `InstanceCache` by lifetime.** We rejected this because a third cache keeps `InstanceCache` unchanged,
+and closing a cycle discards one object instead of walking entries.
 
-**A forwarding proxy in place of a provider**, built on the ghost machinery. It would resolve a different instance
-between two calls on the same object, with nothing visible where it is used.
+**A forwarding proxy, built on the ghost object machinery, in place of a provider.** We rejected this because it would
+resolve a different instance between two calls on the same object, with nothing visible where it is used.
 
 No other alternatives were weighed.
 
 ## Backwards compatibility
 
-- `notShared()` is replaced by `transient()`, and a binding's shared flag by its lifetime.
-- A class with no binding is `Transient`, where [RFC-0001](0001-dependency-injection-container.md) shares it.
+- `notShared()` will be replaced by `transient()`, and the shared flag on a [binding](../GLOSSARY.md#binding) by its
+  [lifetime](../GLOSSARY.md#lifetime).
+- A class with no binding will be `Transient`, where [RFC-0001](0001-dependency-injection-container.md) shares it.
 
 ## Open questions
 
 ## Changelog
+
+- 2026-10-05: Reworded in the readable house style, and the project's own vocabulary linked to the glossary. The
+  design is unchanged.
 
 ## Sources
 

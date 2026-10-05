@@ -13,68 +13,38 @@ obsoletes: []
 
 ## Abstract
 
-The engine's extension mechanism. Modules come from two sources, bundled inside the binary or installed as Composer
-packages, and both produce the same manifest and registrar metadata. Metadata is compiled ahead of time in
-production and reflected at boot in debug, behind one interface the registry consumes. Enabled modules pass through
-two lifecycle phases, register and boot, and the bindings they register are assembled into the container's
-catalogues. Everything else a module contributes is pulled: a component asks every module for contributions at the
-moment it needs them, rather than modules pushing during boot.
+We will add the [engine](../GLOSSARY.md#engine)'s extension mechanism, in which a [module](../GLOSSARY.md#module) is
+either bundled inside the binary or installed as a Composer package, and is described by the same
+[manifest](../GLOSSARY.md#manifest) and [registrar](../GLOSSARY.md#registrar) metadata either way. Metadata will be
+compiled ahead of time in production and reflected at boot in debug, behind one interface the registry consumes. Enabled
+modules will pass through two phases, register and boot, and every [binding](../GLOSSARY.md#binding) they register will
+be assembled into the container's [catalogue](../GLOSSARY.md#catalogue)s. Everything else a module contributes will be
+pulled: a component will ask every module for contributions at the moment it needs them, rather than modules pushing
+during boot.
 
 ## Motivation
 
-Core features of the panel are modules, per [ADR-0013](../adr/0013-core-features-are-modules.md), so the panel
-cannot run without a module system. It is not an optional extension point added once the engine works.
+Each core feature of the panel is a [module](../GLOSSARY.md#module), as
+[ADR-0013](../adr/0013-core-features-are-modules.md) decides, so the panel cannot run without a module system. It is
+not an optional extension point added once the [engine](../GLOSSARY.md#engine) works.
 
-Several components are already written against it and cannot be finished without it. Events leaves reading listener
-attributes off a class to the module system, per [RFC-0009](0009-events.md). HTTP leaves modules contributing
-middleware or routes to it, per [RFC-0010](0010-http-transport.md). Views leaves collecting template sources and
-slot definitions to it, per [RFC-0011](0011-views.md). The container leaves assembling its catalogues to it, per
-[RFC-0001](0001-dependency-injection-container.md).
+Several designs are already written against it and cannot be finished without it. The event dispatcher in
+[RFC-0009](0009-events.md) leaves reading listener attributes off a class to the module system. The HTTP transport in
+[RFC-0010](0010-http-transport.md) leaves modules contributing middleware or routes to it. The views in
+[RFC-0011](0011-views.md) leave collecting template sources and slot definitions to it. The dependency injection
+container in [RFC-0001](0001-dependency-injection-container.md) leaves assembling its catalogues to it.
 
-Modules also have to be discovered cheaply. The panel runs as a worker, per
-[ADR-0009](../adr/0009-the-panel-runs-as-a-frankenphp-worker-in-a-single-binary.md), so discovery happens once at
-boot and is paid back over every request the worker serves, while a developer editing a module needs their change
-visible without a rebuild.
+Modules also have to be discovered cheaply. The panel runs as a worker, as
+[ADR-0009](../adr/0009-the-panel-runs-as-a-frankenphp-worker-in-a-single-binary.md) decides, so discovery happens
+once at boot and is paid back over every request the worker serves. A developer editing a module still needs their
+change to be visible without a rebuild.
 
 ## Proposal
 
-### Concepts
-
-| Term | Meaning |
-|---|---|
-| Module | A unit of functionality registering its own bindings and contributions, bundled or external. |
-| Bundled module | A first-party module shipped inside the binary, with its manifest declared in code. |
-| External module | A Composer package of type `tgp-module`, installed into the modules directory. |
-| Ident | A module's identifier, derived from its package name for an external module and declared for a bundled one. |
-| Manifest | The resolved metadata describing one module. |
-| Registrar | A module's entry class, and the reflected metadata describing which of its methods do what. |
-| Capability | Something a module declares it does, checked by whatever enforces it. |
-| Source | Where manifests and registrar metadata come from, compiled or reflected. |
-| Collector | What a component hands to modules to contribute to, for one type of contribution. |
-| Collection | A component asking every enabled module to contribute, at a moment it chooses. |
-| Panel context | The part of the panel something belongs to: an account, a server or the platform. |
-
-### Components
-
-| Component | Responsibility |
-|---|---|
-| `ModuleManifest` | Immutable metadata for one module. |
-| `ModuleRegistrar` | Immutable reflected metadata about a module's registrar class. |
-| `ModuleManifestBuilder`, `ModuleRegistrarBuilder` | Build the two from a Composer package and by reflection. |
-| `ModuleSource` | Contract providing every manifest and registrar, however they were produced. |
-| `CachedModuleSource`, `LiveModuleSource` | The compiled and the reflecting implementations. |
-| `ModuleRegistry` | Immutable. Holds the known modules, answers lookups, and drives collection. |
-| `EngineBuilder` | Mutable. What a module registers bindings and resolvers through. |
-| `Capability` | Enum of the capabilities a module may declare. |
-| `Register`, `Boot`, `Collect`, `Unscoped` | Attributes marking what a registrar's methods do. |
-| `Manifest`, `Registrar` | Resolvable attributes injecting a module's metadata. |
-| `Collector`, `CollectorHandler` | The contracts a component implements to collect from modules. |
-| `PanelContext` | Enum naming the part of the panel something belongs to. |
-| `ModuleException` | Marker contract implemented by every exception the component throws. |
-
 ### Module sources
 
-A module is bundled or external, and nothing downstream of discovery can tell which:
+A [module](../GLOSSARY.md#module) will be either a [bundled module](../GLOSSARY.md#bundled-module) or an
+[external module](../GLOSSARY.md#external-module), and nothing downstream of discovery can tell which:
 
 | | Bundled | External |
 |---|---|---|
@@ -83,31 +53,38 @@ A module is bundled or external, and nothing downstream of discovery can tell wh
 | Discovered from | The panel itself | The Composer lock file in the modules directory |
 | Core flag | Set | Unset |
 
-External modules are Composer packages installed with Composer driven as a library, per
-[ADR-0012](../adr/0012-modules-are-installed-with-composer-used-as-a-library.md), which also settles the separate
-Composer project, the `provide` block generated from the panel's own lock file, and `extra.tgp` as where metadata
-Composer's schema does not carry lives.
+An external module will be a Composer package of type `tgp-module`, installed into the modules directory. Its
+[module identifier](../GLOSSARY.md#module-identifier) will be derived from its package name, and a bundled module will
+declare its identifier.
 
-Both produce the same `ModuleManifest` and `ModuleRegistrar`. The registry holds one set and never asks where a
-module came from. First-party features therefore ship as bundled modules and are ordinary modules in every other
-respect, per [ADR-0013](../adr/0013-core-features-are-modules.md).
+External modules will be installed with Composer driven as a library, as
+[ADR-0012](../adr/0012-modules-are-installed-with-composer-used-as-a-library.md) decides. That decision also settles
+the separate Composer project, the `provide` block generated from the panel's own lock file, and `extra.tgp` as the
+place for metadata that Composer's schema does not carry.
+
+Both types of module will produce the same `ModuleManifest` and `ModuleRegistrar`. The registry will hold one set of
+them and never ask where a module came from. First-party features will therefore ship as bundled modules and be ordinary
+modules in every other respect, as [ADR-0013](../adr/0013-core-features-are-modules.md) decides.
 
 ### Metadata
 
-`ModuleManifest` is immutable and holds one module's resolved metadata: its ident, vendor, version, name,
-description, declared capabilities, core flag, registrar class name, icon and definition. For an external module it
-is built from the Composer package, with the standard Composer fields read from the package itself and the rest read
-from `extra.tgp`. A bundled module constructs its manifest directly.
+`ModuleManifest` will be immutable and hold one module's resolved metadata: its
+[module identifier](../GLOSSARY.md#module-identifier), vendor, version, name, description, declared capabilities, core
+flag, registrar class name, icon and definition. `ModuleManifestBuilder` will build it for an
+[external module](../GLOSSARY.md#external-module) from the Composer package, reading the standard Composer fields from
+the package itself and the rest from `extra.tgp`. A [bundled module](../GLOSSARY.md#bundled-module) will construct its
+manifest directly.
 
-`ModuleRegistrar` is immutable and holds what reflection found on the registrar class: which method carries
-`#[Register]`, which carries `#[Boot]`, and for each `#[Collect]` method the collector type it accepts, whether it
-carries `#[Unscoped]`, and whether it takes a `PanelContext` parameter. It holds metadata about the class, never an
-instance of it.
+A module's [registrar](../GLOSSARY.md#registrar) is its entry class. `ModuleRegistrar` will be immutable and hold what
+reflection found on that class, and `ModuleRegistrarBuilder` will build it. It will record which method carries
+`#[Register]`, which carries `#[Boot]`, and, for each `#[Collect]` method, the [collector](../GLOSSARY.md#collector)
+type it accepts, whether it carries `#[Unscoped]`, and whether it takes a `PanelContext` parameter. It will hold
+metadata about the class, never an instance of it.
 
-Both are hydrated from an array, so both survive being written out and read back.
+Both will be hydrated from an array, so both survive being written out and read back.
 
-Each is injectable by ident through a resolvable attribute, per
-[ADR-0002](../adr/0002-dependencies-select-their-instance-through-parameter-attributes.md):
+Each will be injectable by identifier through a [resolvable attribute](../GLOSSARY.md#resolvable-attribute), `Manifest`
+or `Registrar`, as [ADR-0002](../adr/0002-dependencies-select-their-instance-through-parameter-attributes.md) decides:
 
 ```php
 public function __construct(
@@ -117,15 +94,17 @@ public function __construct(
 
 #### Capabilities
 
-A module declares capabilities in its manifest, and `Capability` is the enum of those recognised. The record names
-`CrossRoutes`, `ExtendSchema`, `ModifyUi` and `DaemonAccess`; the set grows with the components that enforce them.
+A module will declare each [capability](../GLOSSARY.md#capability) in its [manifest](../GLOSSARY.md#manifest), and
+`Capability` will be the enum of those recognised. The record names `CrossRoutes`, `ExtendSchema`, `ModifyUi` and
+`DaemonAccess`; the set grows with the components that enforce them.
 
-A capability is checked at runtime by whatever enforces it, never by the module system. Declaring one is not being
+Whatever enforces a capability will check it at runtime, never the module system. Declaring a capability is not being
 granted it: routing decides what `CrossRoutes` permits, and the module system only carries the declaration.
 
 ### Sources of metadata
 
-Reflection is the cost this design manages. `ModuleSource` is the seam:
+Reflection is the cost this design manages. Every [module source](../GLOSSARY.md#module-source) will implement one
+interface:
 
 ```php
 interface ModuleSource
@@ -141,109 +120,115 @@ interface ModuleSource
 | `CachedModuleSource` | Production | Reads bundled metadata from a file built into the binary, and external metadata from a file written during discovery. Reflects nothing. |
 | `LiveModuleSource` | Debug | Reflects every module at boot, bundled from the panel's own codebase and external from the modules directory. |
 
-Whatever boots the panel chooses the implementation and hands it to the registry, which does not know which it was
+Whatever boots the panel will choose the implementation and hand it to the registry, which will not know which it was
 given.
 
-`LiveModuleSource` is what makes module development bearable: a change to module code is visible on the next
-request, with no rebuild and no discovery run.
+`LiveModuleSource` will exist for module development: a change to module code will be visible on the next request, with
+no rebuild and no discovery run.
 
-Module metadata written for `CachedModuleSource` goes to the `compiled` root, per [RFC-0008](0008-filesystems.md),
-as PHP the engine writes for PHP to include, so it is opcached rather than decoded on every cold boot. It is not
-cached content and does not go through a filesystem.
+Module metadata written for `CachedModuleSource` will go to the `compiled` [root](../GLOSSARY.md#root) from
+[RFC-0008](0008-filesystems.md), as PHP the [engine](../GLOSSARY.md#engine) writes for PHP to include, so it will be
+opcached rather than decoded on every cold boot. It will not be cached content and will not go through a filesystem.
 
-Bundled registrar metadata is reflected during the build and written into the binary. No build tooling exists yet,
-so nothing produces that file today, and `LiveModuleSource` is the only implementation a developer can run.
+Bundled [registrar](../GLOSSARY.md#registrar) metadata will be reflected during the build and written into the binary.
+No build tooling exists yet, so nothing produces that file today, and `LiveModuleSource` will be the only implementation
+a developer can run.
 
-A module class may carry attributes from libraries the panel knows nothing about. Reflection therefore matches
-attributes by name and instantiates none of them, per
-[ADR-0014](../adr/0014-class-level-attributes-are-memoised-as-presence-flags.md), so a third-party attribute's
-constructor never runs because a module was discovered.
+A module class may carry attributes from libraries the panel knows nothing about. Reflection will therefore match
+attributes by name and instantiate none of them, as
+[ADR-0014](../adr/0014-class-level-attributes-are-memoised-as-presence-flags.md) decides, so a third-party attribute's
+constructor will never run because a module was discovered.
 
 ### The registry
 
-`ModuleRegistry` is immutable, built from a `ModuleSource` when the panel boots.
+`ModuleRegistry` will be immutable, built from a [module source](../GLOSSARY.md#module-source) when the panel boots.
 
 | Lookup | Returns |
 |---|---|
 | `manifest(string $ident)` | One module's manifest. |
 | `registrar(string $ident)` | One module's registrar metadata. |
 | `manifests()` | Every manifest. |
-| `idents()` | Every ident. |
+| `idents()` | Every identifier. |
 | `isEnabled()`, `isDisabled()`, `has()` | Whether a module is enabled, disabled, or known at all. |
 
-Which modules are enabled comes from `ModulesEnabled`, read through the configuration registry between its two
-seals, per [RFC-0004](0004-toml-configuration-loading.md). The module system never scans a directory to work out
-what is enabled, and never repeats the rule that a module configuration file's presence is what enables it:
-configuration is the single source of that.
+Which modules are enabled will come from `ModulesEnabled`, the [core configuration](../GLOSSARY.md#core-configuration)
+object, read through the configuration [registry](../GLOSSARY.md#registry) between its two seals, as
+[RFC-0004](0004-toml-configuration-loading.md) describes. The module system will never scan a directory to work out what
+is enabled, and will never repeat the rule that a module's configuration file being present is what enables it.
+Configuration is the single source of that.
 
-A module present in the source but not in the enabled list is known and disabled. A module in the enabled list with
-no manifest is logged and skipped, because an installation whose configuration names a module that is no longer
-installed should still boot.
+A module present in the source but not in the enabled list will be known and disabled. A module in the enabled list with
+no [manifest](../GLOSSARY.md#manifest) will be logged and skipped, because an installation whose configuration names a
+module that is no longer installed should still boot.
 
-The registry's own lifetime follows the mode that produced it, per [RFC-0007](0007-binding-lifetimes.md):
+The registry's own [lifetime](../GLOSSARY.md#lifetime) will follow the mode that produced it, as
+[RFC-0007](0007-binding-lifetimes.md) describes:
 
 | Mode | Lifetime | Effect |
 |---|---|---|
 | Production | `Process` | Built once at worker boot from compiled metadata, and shared by every request. |
-| Debug | `Cycle` | Rebuilt for each cycle, so edited module code takes effect immediately. |
+| Debug | `Cycle` | Rebuilt for each [cycle](../GLOSSARY.md#cycle), so edited module code takes effect immediately. |
 
-The class is the same in both. Only what constructs it differs.
+The class will be the same in both. Only what constructs it will differ.
 
 ### Lifecycle
 
-Two phases, in order, across every enabled module:
+Every enabled module will pass through two phases, in order:
 
-1. **Register.** Each module's registrar is instantiated and its `#[Register]` method is called with an
-   `EngineBuilder`, which is where it registers bindings and resolvers.
-2. **Boot.** Once every module has registered and the container exists, each module's `#[Boot]` method is called
+1. **Register.** Each module's [registrar](../GLOSSARY.md#registrar) will be instantiated, and its `#[Register]` method
+   called with an `EngineBuilder`, through which the module registers its bindings and resolvers.
+2. **Boot.** Once every module has registered and the container exists, each module's `#[Boot]` method will be called
    with no arguments.
 
-Every module registers before any module boots, so a module's boot may depend on another module having registered.
-A module with no method for a phase is skipped for it, without error.
+Every module will register before any module boots, so a module's boot may depend on another module having registered. A
+module with no method for a phase will be skipped for that phase, without error.
 
-Registrars are instantiated directly during register, because the container does not exist yet: building it is what
-the phase produces. By boot the container exists, and the registrars instantiated during register are the same
+Registrars will be instantiated directly during register, because the container does not exist yet: building it is what
+the phase produces. By boot the container will exist, and the registrars instantiated during register will be the same
 objects.
 
 #### The builder
 
-`EngineBuilder` is the mutable half of the container's registries, per
-[ADR-0003](../adr/0003-mutable-registries-are-sealed-into-immutable-catalogues.md), presented as one surface to a
-module:
+`EngineBuilder` will be the mutable half of the container's registries, per
+[ADR-0003](../adr/0003-mutable-registries-are-sealed-into-immutable-catalogues.md), presented to a module as one
+surface:
 
 | Method | Effect |
 |---|---|
-| `bind(string $abstract): BindingBuilder` | Registers a binding, returning the builder from [RFC-0001](0001-dependency-injection-container.md). |
-| `resolver(string $resolvable, string $resolver, bool $default = false)` | Registers a resolver against a resolvable attribute. |
+| `bind(string $abstract): BindingBuilder` | Registers a [binding](../GLOSSARY.md#binding), returning the builder from [RFC-0001](0001-dependency-injection-container.md). |
+| `resolver(string $resolvable, string $resolver, bool $default = false)` | Registers a [resolver](../GLOSSARY.md#resolver) against a [resolvable attribute](../GLOSSARY.md#resolvable-attribute). |
 
-A builder is scoped to a module for the duration of that module's register call, so every binding registered through
-it records the ident that registered it. Recording the owner is this design's part; what an owner means at
-resolution is module scopes.
+A builder will be scoped to a module for the duration of that module's register call, so every binding registered
+through it will record the [module identifier](../GLOSSARY.md#module-identifier) that registered it. Recording the owner
+is this design's part. What an owner means at [resolution](../GLOSSARY.md#resolution) is left to
+[RFC-0016](0016-module-scopes.md).
 
-After the register phase the builder is consumed, producing the `BindingCatalogue` and `ResolverCatalogue` the
-container is constructed with, and is unavailable afterwards. This is the assembly
-[RFC-0001](0001-dependency-injection-container.md) leaves to the module lifecycle.
+After the register phase the builder will be consumed, producing each [catalogue](../GLOSSARY.md#catalogue) the
+container is constructed with, `BindingCatalogue` and `ResolverCatalogue`, and will be unavailable afterwards. This is
+the assembly [RFC-0001](0001-dependency-injection-container.md) leaves to the module lifecycle.
 
 #### Alias chains
 
-An alias may name another alias. Assembly flattens every chain, so each alias names the abstract that owns the
-binding directly and resolution stays a single hop.
+An [alias](../GLOSSARY.md#alias) may name another alias. Assembly will flatten every chain, so each alias names the
+[abstract](../GLOSSARY.md#abstract) that owns the [binding](../GLOSSARY.md#binding) directly and
+[resolution](../GLOSSARY.md#resolution) stays a single hop.
 
-It is done here because a catalogue is assembled once and never changes afterwards, while an alias is normalised
-before the instance cache is consulted on every resolution, per
-[RFC-0006](0006-container-improvements.md). Flattening at assembly pays for the walk once, at boot, rather than on
-every resolution for a structure that cannot change.
+Flattening will happen at assembly because a [catalogue](../GLOSSARY.md#catalogue) is assembled once and never changes
+afterwards, while an alias is normalised before the instance cache is consulted on every resolution, as
+[RFC-0006](0006-container-improvements.md) describes. Flattening at assembly will pay for the walk once, at boot, rather
+than on every resolution for a structure that cannot change.
 
-A chain returning to an alias already seen cannot be flattened, and fails the assembly, naming the aliases in the
-cycle. A cycle is therefore a boot failure that says what is wrong, rather than a resolution that exhausts the
+A chain that returns to an alias already seen cannot be flattened. It will fail the assembly, naming the aliases in
+the loop. A loop will therefore be a boot failure that says what is wrong, rather than a resolution that exhausts the
 stack.
 
 ### Collection
 
-Everything a module contributes beyond bindings is pulled rather than pushed. A component asks for contributions
-when it wants them, which may be at boot, on first use, or never.
+Everything a [module](../GLOSSARY.md#module) contributes beyond bindings will be pulled rather than pushed. A component
+will ask for contributions when it wants them, which may be at boot, on first use, or never.
 
-A component defines its own collector type and a handler that drives collection for it:
+A component will define its own [collector](../GLOSSARY.md#collector) type and a handler that drives
+[collection](../GLOSSARY.md#collection) for it:
 
 ```php
 interface Collector {}
@@ -260,19 +245,19 @@ interface CollectorHandler
 }
 ```
 
-The registry drives the flow, and the component decides when it runs:
+The registry will drive the flow, and the component will decide when it runs:
 
-1. The component passes its handler to `ModuleRegistry::collect(CollectorHandler $handler, ?PanelContext $context)`.
-2. The registry walks every enabled module.
-3. For each, it checks the registrar metadata for a `#[Collect]` method accepting that collector type, and skips the
-   module when there is none.
-4. `create()` produces a fresh collector for that module.
-5. The module's method populates it.
-6. `process()` receives the populated collector.
-7. After every module, `finalise()` runs once.
+1. The component will pass its handler to `ModuleRegistry::collect(CollectorHandler $handler, ?PanelContext $context)`.
+2. The registry will walk every enabled module.
+3. For each, it will check the [registrar](../GLOSSARY.md#registrar) metadata for a `#[Collect]` method accepting that
+   collector type, and skip the module when there is none.
+4. `create()` will produce a fresh collector for that module.
+5. The module's method will populate it.
+6. `process()` will receive the populated collector.
+7. After every module, `finalise()` will run once.
 
-A module receives a fresh collector each time, so nothing a module contributes can reach or overwrite what another
-contributed. The handler is the only thing that sees them all.
+A module will receive a fresh collector each time, so nothing a module contributes can reach or overwrite what
+another contributed. The handler will be the only thing that sees them all.
 
 ```php
 #[Collect]
@@ -282,100 +267,111 @@ public function routes(RouteCollector $routes): void
 }
 ```
 
-The collector type is taken from the method's type hint. A `#[Collect]` method may also declare a `PanelContext`
-parameter, in which case it participates only when collection runs for that context.
+The collector type will be taken from the method's type hint. A `#[Collect]` method may also declare a `PanelContext`
+parameter, in which case it will participate only when collection runs for that
+[panel context](../GLOSSARY.md#panel-context).
 
 #### Scope of a contribution
 
-By default a module's `#[Collect]` method contributes within its own module's boundary, and the `$scoped` flag
-passed to the handler says so. `#[Unscoped]` marks a method as contributing outside it.
+By default a [module](../GLOSSARY.md#module)'s `#[Collect]` method will contribute within its own module's boundary, and
+the `$scoped` flag passed to the handler will say so. `#[Unscoped]` will mark a method as contributing outside it.
 
-Whether that is permitted is the handler's decision, never the module system's. The handler receives both the flag
-and the module's manifest, so it has the declaration and the capabilities to decide with. Permissions refuse
-unscoped contributions outright; routing may allow one from a module declaring `CrossRoutes`.
+Whether that is permitted will be the handler's decision, never the module system's. The handler will receive both the
+flag and the module's [manifest](../GLOSSARY.md#manifest), so it has the declaration and every
+[capability](../GLOSSARY.md#capability) the module declares to decide with. For example, permissions refuse unscoped
+contributions outright, while routing may allow one from a module declaring `CrossRoutes`.
 
 `#[Unscoped]` here means outside the module's own contribution boundary. It is unrelated to the container's module
-scopes, which are a separate axis.
+scopes in [RFC-0016](0016-module-scopes.md), which are a separate axis.
 
 #### Caching what was collected
 
-There is no cacheable collector abstraction. Different components cache differently: a route collector can cache a
-form that skips collection entirely on later requests, while another gains nothing from caching at all. A component
-caches around collection however suits it.
+There will be no cacheable [collector](../GLOSSARY.md#collector) abstraction. Different components cache differently: a
+route collector can cache a form that skips [collection](../GLOSSARY.md#collection) entirely on later requests, while
+another gains nothing from caching at all. A component will cache around collection however suits it.
 
 ### Panel context
 
-`PanelContext` names the part of the panel something belongs to: `Account`, `Server` or `Platform`. It is used to
-scope collection, and routing uses it to decide a route's URL prefix.
+`PanelContext` will be an enum with one case for each [panel context](../GLOSSARY.md#panel-context): `Account`, `Server`
+and `Platform`. It will be used to scope [collection](../GLOSSARY.md#collection), and routing will use it to decide a
+route's URL prefix.
 
-`Server` is a subcontext of `Account` for routing and a value in its own right for collection.
+`Server` will be a subcontext of `Account` for routing, and a value in its own right for collection.
 
-It is defined in the engine's shared values rather than inside collection, alongside the client address value
-object. Collection is where it was first written down, but routing needs it too, which is the promotion
-[RFC-0010](0010-http-transport.md) records as unsettled. Two consumers make it shared, so it is not owned by
-either.
+It will be defined in the [engine](../GLOSSARY.md#engine)'s shared values rather than inside collection, alongside the
+client address value object. Collection is where it was first written down, but routing needs it too, which is the
+promotion [RFC-0010](0010-http-transport.md) records as unsettled. Two consumers make it shared, so it will not be owned
+by either.
 
 ### Errors
 
-Every exception implements `ModuleException`.
+Every exception will implement `ModuleException`, a marker contract.
 
 | Exception | Thrown when |
 |---|---|
 | `ModuleSourceException` | Metadata is missing or unreadable. Its message says what to do: run discovery, or check the installation. |
-| `UnknownModuleException` | A manifest or registrar is asked for by an ident that is not known. |
+| `UnknownModuleException` | A manifest or registrar is asked for by an identifier that is not known. |
 
-An enabled module with no manifest is a warning rather than an exception, and the module is skipped.
+An enabled [module](../GLOSSARY.md#module) with no [manifest](../GLOSSARY.md#manifest) will be a warning rather than an
+exception, and the module will be skipped.
 
 ### Out of scope
 
-- **Module scopes.** What the owner recorded on a binding means at resolution, and what a module is handed because
-  of it, is its own design.
-- **Module resources.** Provisioning a module's schema, directories or filesystems.
+- **Module scopes.** What the owner recorded on a [binding](../GLOSSARY.md#binding) means at
+  [resolution](../GLOSSARY.md#resolution), and what a module is handed because of it, is its own design,
+  [RFC-0016](0016-module-scopes.md).
+- **Module resources.** Provisioning a [module](../GLOSSARY.md#module)'s schema, directories or filesystems.
 - **The build step.** Reflecting bundled registrars during the build and writing them into the binary belongs to
-  bootstrapping, along with everything else that composes the engine.
-- **Enabling and disabling modules**, which is the command line's, per
-  [RFC-0004](0004-toml-configuration-loading.md).
-- **Which collectors exist.** Each component defines its own collector and handler. This design defines the
-  mechanism and nothing that uses it.
-- **Enforcing capabilities**, which belongs to whatever a capability governs.
+  bootstrapping, along with everything else that composes the [engine](../GLOSSARY.md#engine).
+- **Enabling and disabling modules.** That belongs to the command line, as
+  [RFC-0004](0004-toml-configuration-loading.md) describes.
+- **Which collectors exist.** Each component defines its own [collector](../GLOSSARY.md#collector) and handler. This
+  design defines the mechanism and nothing that uses it.
+- **Enforcing capabilities.** That belongs to whatever a [capability](../GLOSSARY.md#capability) governs.
 - **A module API package and an SDK** for third-party development.
-- **Inter-module dependencies.** Nothing here resolves a dependency between two modules, or orders them by one.
+- **Inter-module dependencies.** Nothing here will resolve a dependency between two modules, or order them by one.
 
 ## Alternatives considered
 
 The decisions this design rests on are recorded separately, with the alternatives each one rejected:
 
+- dependencies selecting their instance through parameter attributes, in
+  [ADR-0002](../adr/0002-dependencies-select-their-instance-through-parameter-attributes.md)
+- sealing mutable registries into immutable catalogues, in
+  [ADR-0003](../adr/0003-mutable-registries-are-sealed-into-immutable-catalogues.md)
+- the panel running as a FrankenPHP worker in a single binary, in
+  [ADR-0009](../adr/0009-the-panel-runs-as-a-frankenphp-worker-in-a-single-binary.md)
 - installing modules with Composer driven as a library, in
   [ADR-0012](../adr/0012-modules-are-installed-with-composer-used-as-a-library.md)
 - core features being modules, in [ADR-0013](../adr/0013-core-features-are-modules.md)
-- sealing mutable registries into immutable catalogues, in
-  [ADR-0003](../adr/0003-mutable-registries-are-sealed-into-immutable-catalogues.md)
 
-**Collection as a third lifecycle phase**, with modules pushing every contribution during boot. A component would
-then receive contributions whether or not it is ever used, and would have nowhere to put the decision of when to
-collect. Pulling lets a component collect on first use, or never.
+**Collection as a third lifecycle phase**, with modules pushing every contribution during boot. We rejected this
+because a component would then receive contributions whether or not it is ever used, and would have nowhere to put the
+decision of when to collect. Pulling lets a component collect on first use, or never.
 
-**A cacheable collector abstraction.** Components cache collected data in different shapes, and some gain nothing
-from caching, so an abstraction would have to cover cases that do not resemble each other.
+**A cacheable collector abstraction.** We rejected this because components cache collected data in different shapes,
+and some gain nothing from caching, so an abstraction would have to cover cases that do not resemble each other.
 
-**Following alias chains at runtime**, walking from one alias to the next on each lookup. The walk would repeat on
-every resolution, in the path taken before the instance cache is consulted, for a structure fixed at boot. A cycle
-would also be found by exhausting the stack rather than when the catalogue was assembled.
+**Following alias chains at runtime**, walking from one alias to the next on each lookup. We rejected this because the
+walk would repeat on every resolution, in the path taken before the instance cache is consulted, for a structure fixed
+at boot. A loop would also be found by exhausting the stack rather than when the catalogue was assembled.
 
 No other alternatives were weighed.
 
 ## Backwards compatibility
 
-Nothing breaks. No module exists, and the modules directory in the repository is empty.
+Nothing will break. No module exists, and the modules directory in the repository is empty.
 
-The container is constructed with its catalogues today and gains the step that builds them, which is what
-[RFC-0001](0001-dependency-injection-container.md) left to this design rather than a change to it.
+The container is constructed with its catalogues today, and will gain the step that builds them. That step is what
+[RFC-0001](0001-dependency-injection-container.md) left to this design, not a change to it.
 
 ## Open questions
 
 ## Changelog
 
 - 2026-09-16: Alias chains are flattened when the catalogue is assembled, which settles the only open question.
+- 2026-10-05: Reworded in the readable house style, and the project's own vocabulary linked to the glossary. The
+  design is unchanged.
 
 ## Sources
 

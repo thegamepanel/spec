@@ -13,50 +13,34 @@ obsoletes: []
 
 ## Abstract
 
-The engine's HTTP layer: immutable request and response objects hydrated from the superglobals and emitted back, a
-middleware pipeline wrapping a terminal handler, and a route table the engine owns, matched against and generated
-from. It accepts a request, runs it through the pipeline, resolves a handler and emits a response, and stops at the
-handler seam.
+We will build the [engine](../GLOSSARY.md#engine)'s HTTP layer from immutable request and response objects, a middleware
+pipeline wrapping a terminal handler, and a route table the engine owns, which requests are matched against and links
+generated from. The layer will hydrate a request from the superglobals, run it through the pipeline, resolve a handler
+and emit the response. It stops at the handler seam.
 
 ## Motivation
 
-The engine has no HTTP layer. `nikic/fast-route`, `filp/whoops` and `monolog/monolog` have been required since the
-start and are unused.
+The [engine](../GLOSSARY.md#engine) has no HTTP layer. `nikic/fast-route`, `filp/whoops` and `monolog/monolog` have been
+required since the start and are unused.
 
-The panel is server-rendered, per
-[ADR-0001](../adr/0001-the-panel-is-a-single-system-not-a-panel-and-an-engine.md), so the engine has to accept a
-request, decide what answers it, and produce HTML. Server-rendering also means every anchor and every form action is
+The panel is server-rendered, as
+[ADR-0001](../adr/0001-the-panel-is-a-single-system-not-a-panel-and-an-engine.md) decides, so the engine has to accept
+a request, decide what answers it, and produce HTML. Server rendering also means every anchor and every form action is
 generated on the server, so routes have to run backwards as well as forwards.
 
 ## Proposal
 
-### Concepts
-
-| Term | Meaning |
-|---|---|
-| Request | An immutable description of what arrived over the wire. |
-| Response | Status, headers, cookies and a body, ready to be emitted. |
-| Handler | Anything that turns a request into a response. |
-| Middleware | Something wrapped around a handler, which may act before it, after it, or instead of it. |
-| Pipeline | Middleware composed around a terminal handler, itself a handler. |
-| Route | One path pattern, the methods it answers, and what handles it. |
-| Panel context | The part of the panel a route belongs to, which decides its URL prefix. |
-
-### Components
-
-| Component | Responsibility |
-|---|---|
-| `Request`, `Response` | The messages, bespoke rather than PSR-7, per [ADR-0018](../adr/0018-http-messages-are-bespoke-not-psr-7.md). |
-| `Headers`, `Cookies`, `Cookie`, `Uri`, `UploadedFiles`, `UploadedFile` | The collections and values a message carries. |
-| `Method`, `Status` | Enums for the request method and the response status. |
-| `BodyWriter`, `Emitter` | Writing a streamed body, and emitting a response. |
-| `Handler`, `Middleware`, `Pipeline` | The contracts for handling a request, and their composition. |
-| `Route`, `RouteRegistry`, `RouteCatalogue` | The route table, collected and then sealed. |
-| `Router` | A handler that matches a request to a route and delegates to it. |
+The messages will be `Request` and `Response`, bespoke rather than PSR-7, as
+[ADR-0018](../adr/0018-http-messages-are-bespoke-not-psr-7.md) decides. They will carry their collections and values as
+`Headers`, `Cookies`, `Cookie`, `Uri`, `UploadedFiles` and `UploadedFile`, and the request method and response status as
+the enums `Method` and `Status`. `BodyWriter` will write a streamed body, and `Emitter` will emit a response. `Handler`
+and `Middleware` will be the contracts for handling a request, and `Pipeline` will compose them. Routes will be
+collected by `RouteRegistry` and sealed into `RouteCatalogue`, and `Router` will be a handler that matches a request to
+a `Route` and delegates to it.
 
 ### Messages
 
-A `Request` is constructed once per cycle and never changed.
+A `Request` will be constructed once per [cycle](../GLOSSARY.md#cycle) and never changed.
 
 | Member | Type | Taken from |
 |---|---|---|
@@ -70,37 +54,38 @@ A `Request` is constructed once per cycle and never changed.
 | `body` | Stream | The raw body. |
 | `ip` | `IpAddress` | The client address, resolved through trusted proxies. |
 
-`Request::fromGlobals()` hydrates from the superglobals, which FrankenPHP repopulates for each request inside the
-worker callback, per [ADR-0009](../adr/0009-the-panel-runs-as-a-frankenphp-worker-in-a-single-binary.md). A general
-constructor takes the same values explicitly, so a test builds a request without touching global state.
+`Request::fromGlobals()` will hydrate from the superglobals, which FrankenPHP, the runtime chosen in
+[ADR-0009](../adr/0009-the-panel-runs-as-a-frankenphp-worker-in-a-single-binary.md), repopulates for each request inside
+the worker callback. A general constructor will take the same values explicitly, so a test can build a request without
+touching global state.
 
-PHP has already parsed the form body, decoded the encoding, folded the headers and populated the uploaded files
-before any engine code runs, so the request hydrates rather than parses. The body is the raw stream, read once and
-held, and is not decoded here: it stays a stream because uploads are measured in gigabytes. When the request was
-multipart, PHP has already consumed it.
+PHP has already parsed the form body, decoded the encoding, folded the headers and populated the uploaded files before
+any [engine](../GLOSSARY.md#engine) code runs, so the request will hydrate rather than parse. The body will be the raw
+stream, read once and held, and not decoded here: it will stay a stream because uploads are measured in gigabytes. When
+the request was multipart, PHP has already consumed it.
 
-Headers are normalised from the server values rather than from `getallheaders()`, so the source is the same under a
-test as under the worker. Lookup is case insensitive and values are multi-valued.
+Headers will be normalised from the server values rather than from `getallheaders()`, so the source is the same under a
+test as under the worker. Lookup will be case insensitive, and values will be multi-valued.
 
-`Method` covers GET, HEAD, POST, PUT, PATCH, DELETE and OPTIONS. A method outside that set is a routing outcome, not
-a hydration failure.
+`Method` will cover GET, HEAD, POST, PUT, PATCH, DELETE and OPTIONS. A method outside that set will be a routing
+outcome, not a hydration failure.
 
-The client address comes from the forwarded-for header, since the reverse proxy in front of the worker is always the
-immediate peer. Loopback is trusted by default and the trusted set is configurable. `IpAddress` normalises and
-validates both address families, and belongs in the engine's shared values rather than here, because tokens and
-audit records use it too.
+The client address will come from the forwarded-for header, since the reverse proxy in front of the worker is always the
+immediate peer. Loopback will be trusted by default, and the trusted set will be configurable. `IpAddress` will
+normalise and validate both address families. It will belong with the engine's shared values rather than here, because
+tokens and audit records use it too.
 
 #### No attribute bag
 
-A request carries no general-purpose property bag, and nothing copies a request to attach something to it. Middleware
-that resolves something, such as the authenticated user or the matched route, binds it into the open cycle from
-[RFC-0007](0007-binding-lifetimes.md), and whatever needs it resolves it from the container. A request stays a
-description of what arrived.
+A request will carry no general-purpose property bag, and nothing will copy a request to attach something to it.
+Middleware that resolves something, such as the authenticated user or the matched route, will bind it into the open
+[cycle](../GLOSSARY.md#cycle) from [RFC-0007](0007-binding-lifetimes.md), and whatever needs it will resolve it from the
+container. A request will stay a description of what arrived.
 
 #### Responses
 
-`Response` carries a status, headers, cookies and a body, and takes no position on content type: the content type is
-a header, set by whatever produced the body.
+`Response` will carry a status, headers, cookies and a body, and take no position on content type: the content type will
+be a header, set by whatever produced the body.
 
 | Factory | Produces |
 |---|---|
@@ -109,14 +94,14 @@ a header, set by whatever produced the body.
 | `noContent()` | A 204 with no body. |
 | `stream(Closure $writer, Status $status = Status::Ok)` | A streamed body, written by the closure. |
 
-`Status` is an integer-backed enum over the registered status codes, carrying the reason phrase. Being an enum, a
-code outside the registry cannot be expressed, and the non-standard codes are left out. The reason phrase is not
-transmitted over HTTP/2 or HTTP/3, which is what the proxy negotiates for most traffic; it exists for logs and error
-pages.
+`Status` will be an integer-backed enum over the registered status codes, carrying the reason phrase. As an enum, it
+will not be able to express a code outside the registry, and the non-standard codes will be left out. The reason phrase
+is not transmitted over HTTP/2 or HTTP/3, which is what the proxy negotiates for most traffic; it will exist for logs
+and error pages.
 
-A body is a string, or a closure taking a `BodyWriter` for a streamed one. The closure is given a writer rather than
-writing directly, so streaming is tested against a fake writer instead of output buffering. `BodyWriter` writes a
-string, writes a file and flushes.
+A body will be a string, or a closure taking a `BodyWriter` for a streamed one. The closure will be given a writer
+rather than writing directly, so streaming can be tested against a fake writer instead of output buffering. `BodyWriter`
+will write a string, write a file and flush.
 
 ```php
 Response::stream(static function (BodyWriter $out) use ($path): void {
@@ -124,8 +109,8 @@ Response::stream(static function (BodyWriter $out) use ($path): void {
 });
 ```
 
-`Emitter` writes a response: the status line, the headers, the cookies, then the body, whether that body is a string
-or a closure.
+`Emitter` will write a response: the status line, the headers, the cookies, then the body, whether that body is a
+string or a closure.
 
 ### The pipeline
 
@@ -141,48 +126,49 @@ interface Middleware
 }
 ```
 
-`Handler` is the seam this design stops at. Everything that turns a request into a response implements it, including
-a composed pipeline, so a pipeline is substitutable for the handler it wraps.
+`Handler` will be the seam this design stops at. Everything that turns a request into a response will implement it,
+including a composed pipeline, so a pipeline will be substitutable for the handler it wraps.
 
-Middleware receives the next handler rather than a closure, so a test hands a middleware the terminal handler
-directly. Returning without calling it short-circuits: an authentication middleware returning a redirect never
-reaches what it wrapped.
+Middleware will receive the next handler rather than a closure, so a test can hand a middleware the terminal handler
+directly. Returning without calling it will short-circuit: an authentication middleware returning a redirect will never
+reach what it wrapped.
 
 ```php
 $handler = Pipeline::through($middleware)->then($terminal);
 ```
 
-Middleware are given as class names and resolved through the container, per
-[RFC-0001](0001-dependency-injection-container.md), when the pipeline is composed rather than on every request. They
-are `Process` lifetime, per [RFC-0007](0007-binding-lifetimes.md), so a middleware holds no state belonging to a
-request and reaches anything that does through a provider.
+Middleware will be given as class names and resolved through the container, as
+[RFC-0001](0001-dependency-injection-container.md) describes, when the pipeline is composed rather than on every
+request. They will have the `Process` [lifetime](../GLOSSARY.md#lifetime) from [RFC-0007](0007-binding-lifetimes.md), so
+a middleware will hold no state belonging to a request and will reach anything that does through a
+[provider](../GLOSSARY.md#provider).
 
-The pipeline is composed at two moments. The outer pipeline wraps the router and is composed once at boot, since
-every request passes through it whatever it matches. A route's pipeline cannot be composed at boot, because which
-middleware apply depends on the route matched, so it is composed on first use and kept for the life of the worker,
-keyed by route. Composing on every request is what a runtime that boots per request forces and a worker does not.
+The pipeline will be composed at two moments. The outer pipeline will wrap the router and be composed once at boot,
+since every request passes through it whatever it matches. A route's pipeline cannot be composed at boot, because which
+middleware apply depends on the route matched. It will be composed on first use instead, and kept for the life of the
+worker, keyed by route. A runtime that boots per request forces composition on every request; a worker does not.
 
-Middleware run outward to inward and unwind in reverse. Three sources apply in order, global, then group, then route,
-and declaration order within each. A middleware named by more than one source runs once, at its earliest position.
-There are no priority numbers: order is positional.
+Middleware will run outward to inward and unwind in reverse. Three sources will apply in order: global, then group, then
+route, with declaration order within each. A middleware named by more than one source will run once, at its earliest
+position. There will be no priority numbers: order will be positional.
 
 ### Routing
 
-The route table belongs to the engine. FastRoute matches a path against patterns and answers found, not found or
-method not allowed; it neither holds routes in a form anything else can read nor runs backwards. Since every anchor
-and form action is generated, the engine owns the table and compiles FastRoute from it.
+FastRoute matches a path against patterns and answers found, not found or method not allowed; it neither holds routes in
+a form anything else can read nor runs backwards. Since every anchor and form action is generated, the
+[engine](../GLOSSARY.md#engine) will own the route table and compile FastRoute from it.
 
-`RouteRegistry` collects routes and seals into `RouteCatalogue`, per
-[ADR-0003](../adr/0003-mutable-registries-are-sealed-into-immutable-catalogues.md). The catalogue is indexed by name
-and holds the dispatch data compiled from the table, along with each pattern parsed into its variants, which is what
-generation needs. Both are built once at boot and held for the life of the worker, so no compiled form is cached to
-a file.
+`RouteRegistry` will collect routes and seal into `RouteCatalogue`, following
+[ADR-0003](../adr/0003-mutable-registries-are-sealed-into-immutable-catalogues.md). The
+[catalogue](../GLOSSARY.md#catalogue) will be indexed by name and hold the dispatch data compiled from the table, along
+with each pattern parsed into its variants, which is what generation needs. Both will be built once at boot and held for
+the life of the worker, so no compiled form will be cached to a file.
 
-A `Route` carries the methods it answers, its path pattern, its name, the handler behind it, its middleware and its
-panel context. Routes are a projection of the action registry, so a route's name comes from the action behind it and
-nothing declares a name by hand.
+A `Route` will carry the methods it answers, its path pattern, its name, the handler behind it, its middleware and its
+[panel context](../GLOSSARY.md#panel-context). Routes will be a projection of the action registry, so a route's name
+will come from the action behind it and nothing will declare a name by hand.
 
-The router is a `Handler`. It matches, then delegates:
+The router will be a `Handler`. It will match, then delegate:
 
 | Outcome | Result |
 |---|---|
@@ -190,28 +176,28 @@ The router is a `Handler`. It matches, then delegates:
 | Not found | A 404 status, with presentation left to whatever renders errors. |
 | Method not allowed | A 405 status carrying the permitted methods in an allow header. |
 
-`HEAD` is served by the matching `GET` route with the body suppressed when the response is emitted. Paths are case
-sensitive. A path differing from its canonical form only by a trailing slash redirects to the canonical form.
-Parameters are extracted as strings; turning one into an entity belongs to whatever consumes the route.
+`HEAD` will be served by the matching `GET` route, with the body suppressed when the response is emitted. Paths will be
+case sensitive. A path differing from its canonical form only by a trailing slash will redirect to the canonical form.
+Parameters will be extracted as strings; turning one into an entity belongs to whatever consumes the route.
 
-Each route belongs to a panel context, and each context maps to a URL prefix taken from configuration rather than
-fixed in code, since the panel decides its own URL shape.
+Each route will belong to a panel context, and each context will map to a URL prefix taken from configuration rather
+than fixed in code, since the panel decides its own URL shape.
 
-Generation is not a service. The catalogue looks a route up by name, and the route substitutes parameters into its
-own pattern, validating them against its own constraints, so a missing or invalid parameter throws rather than
-producing a broken link.
+Generation will not be a service. The catalogue will look a route up by name. The route will substitute parameters into
+its own pattern and validate them against its own constraints, so a missing or invalid parameter will throw rather than
+produce a broken link.
 
 ```php
 $catalogue->get('server.show')->path(['server' => $id]);
 ```
 
-An absolute URL is not built here. The scheme and host come from configuration rather than from the current request,
-so a link generated in a queued job matches one generated in a request, and whatever needs an absolute URL combines
-the two.
+An absolute URL will not be built here. The scheme and host will come from configuration rather than from the current
+request, so a link generated in a queued job will match one generated in a request, and whatever needs an absolute URL
+will combine the two.
 
 ### Errors
 
-A middleware may catch what it wraps, but the pipeline catches nothing, and neither does the router. Turning an
+A middleware may catch what it wraps, but the pipeline will catch nothing, and neither will the router. Turning an
 exception into a response belongs to whatever handles errors, and containing one belongs to whatever drives the
 worker.
 
@@ -221,15 +207,15 @@ worker.
   belongs to bootstrapping. Anything serving every driver is not an HTTP concern.
 - **Errors and diagnostics.** Turning exceptions into responses, logging and error pages serve every driver too.
 - **Views.** Templates, layouts and fragment rendering produce the body this layer emits.
-- **Actions.** The module-facing layer sits on the other side of the handler seam, and owns how methods are used,
-  how parameters become entities, and what a result maps to.
+- **Actions.** The [module](../GLOSSARY.md#module)-facing layer sits on the other side of the handler seam, and owns how
+  methods are used, how parameters become entities, and what a result maps to.
 - **Sessions.** They own a table, a store and an expiry policy. Their cookies are transported here.
-- **Route authoring.** Routes arrive from the action registry; this defines the shape they arrive in.
+- **Route authoring.** Routes arrive from the action registry; this design defines the shape they arrive in.
 - **Body decoding and content types.** Decoding a body and deciding a content type belong to what consumes and
   produces it.
 - **Cross-origin handling, method override, and built-in middleware.** There is no cross-origin consumer, how methods
   are used is decided where actions are defined, and the middleware that exist arrive with what needs them.
-- **Modules contributing middleware or routes**, which is a collector in the module system.
+- **Modules contributing middleware or routes**, which is a [collector](../GLOSSARY.md#collector) in the module system.
 
 ## Alternatives considered
 
@@ -238,32 +224,37 @@ The decisions this design rests on are recorded separately, with the alternative
 - bespoke messages rather than PSR-7 and PSR-15, in [ADR-0018](../adr/0018-http-messages-are-bespoke-not-psr-7.md)
 - the panel being one server-rendered system, in
   [ADR-0001](../adr/0001-the-panel-is-a-single-system-not-a-panel-and-an-engine.md)
+- sealing mutable registries into immutable catalogues, in
+  [ADR-0003](../adr/0003-mutable-registries-are-sealed-into-immutable-catalogues.md)
 - running as a worker, in [ADR-0009](../adr/0009-the-panel-runs-as-a-frankenphp-worker-in-a-single-binary.md)
 
-**Using FastRoute's route collection as the route table.** It cannot be read back or run backwards, and generation
-needs both, so the table is the engine's and FastRoute is compiled from it.
+**Using FastRoute's route collection as the route table.** We rejected this because it cannot be read back or run
+backwards, and generation needs both.
 
-**FastRoute's file-backed cached dispatcher.** The worker already holds the compiled form in memory, so a file would
-add staleness for no gain.
+**FastRoute's file-backed cached dispatcher.** We rejected this because the worker already holds the compiled form in
+memory, so a file would add staleness for no gain.
 
-**Composing every pipeline at boot.** Which middleware apply to a route depends on the route matched, so a route's
-pipeline is composed on first use and kept instead.
+**Composing every pipeline at boot.** We rejected this because which middleware apply to a route depends on the route
+matched.
 
 No other alternatives were weighed.
 
 ## Backwards compatibility
 
-Nothing breaks. The engine has no HTTP layer before this.
+Nothing will break. The [engine](../GLOSSARY.md#engine) has no HTTP layer today.
 
 ## Open questions
 
 - ~~**Where the panel context is defined.** Routing needs it, and it is currently defined inside the module system's
   collector work. It has to be promoted somewhere shared before routing can consume it.~~ Resolved by
-  [RFC-0015](0015-module-system.md), which defines it in the engine's shared values, alongside the client address.
+  [RFC-0015](0015-module-system.md), which defines it in the [engine](../GLOSSARY.md#engine)'s shared values, alongside
+  the client address.
 
 ## Changelog
 
 - 2026-09-16: Where the panel context is defined is resolved by [RFC-0015](0015-module-system.md).
+- 2026-10-05: Reworded in the readable house style, and the project's own vocabulary linked to the glossary. The
+  design is unchanged.
 
 ## Sources
 
