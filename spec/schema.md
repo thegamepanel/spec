@@ -5,9 +5,9 @@ includes: [ADR-0007, RFC-0003]
 
 # Schema builder
 
-Schema changes are built as objects that produce their own SQL, alongside the [query builder](query-builder.md) and
-executed through a connection like any other statement, per [Database](database.md). Schema statements bind no
-values: every literal is written into the SQL.
+Schema changes are built as objects that produce their own SQL, alongside the [query builder](query-builder.md), and are
+executed through a [connection](../GLOSSARY.md#connection) like any other statement, per [Database](database.md). A
+[schema statement](../GLOSSARY.md#schema-statement) binds no values: every literal is written into the SQL.
 
 The DDL is MySQL's, per [ADR-0007](../adr/0007-mysql-and-mariadb-are-the-default-database.md).
 
@@ -23,8 +23,9 @@ The DDL is MySQL's, per [ADR-0007](../adr/0007-mysql-and-mariadb-are-the-default
 | `Rename::table(string $table, string $newName)` | `RENAME TABLE`. |
 | `Truncate::table(string $table)` | `TRUNCATE TABLE`. |
 
-`Schema` marks a complete statement and extends `Expression`, adding nothing. `Column` and `Index` mark a column and
-an index definition, and both extend `Expression` too, so a definition is an expression in its own right.
+`Schema` marks a complete [schema statement](../GLOSSARY.md#schema-statement) and extends `Expression`, adding nothing.
+`Column` and `Index` mark a column and an index definition, and both extend `Expression` too, so a definition is an
+[expression](../GLOSSARY.md#expression) in its own right.
 
 Table, column and index names are written between backticks. Nothing doubles a backtick inside a name, and string
 literals, comments and defaults are written between single quotes without escaping.
@@ -94,7 +95,8 @@ applies.
 `ifExists()` is valid only on a table or a database, and `temporary()` only on a table. Either used on another type
 throws `InvalidSchemaException`.
 
-A drop of a table or a database is a statement executed on its own. The others are used within `Alter::table()`.
+A drop of a table or a database is a statement executed on its own. The others
+are used within `Alter::table()`.
 
 ## Columns
 

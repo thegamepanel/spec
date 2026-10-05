@@ -5,34 +5,36 @@ includes: [ADR-0003, ADR-0005, ADR-0006, ADR-0010, RFC-0002, RFC-0004, RFC-0005]
 
 # Configuration
 
-Configuration is read from TOML files into a single tree, and the tree hydrates typed configuration objects held in
-an immutable catalogue. Environment variables are available during bootstrap through a static class, and are
-interpolated into the tree as it loads.
+Configuration is read from TOML files into a single [configuration tree](../GLOSSARY.md#configuration-tree), which
+hydrates typed [configuration object](../GLOSSARY.md#configuration-object)s held in an immutable
+[catalogue](../GLOSSARY.md#catalogue). Environment variables are available during bootstrap through a static class, and
+are interpolated into the tree as it loads.
 
 ## Paths
 
-`Paths` is a readonly value object holding five absolute directories: `config`, `data`, `modules`, `cache` and
-`logs`. Each has a method of the same name joining a relative path onto it, trimming the root's trailing separator
-and the path's leading one, so a path given with or without a leading separator produces the same result.
+`Paths` is a readonly value object holding five absolute directories, the [root](../GLOSSARY.md#root)s: `config`,
+`data`, `modules`, `cache` and `logs`. Each has a method of the same name joining a
+[relative path](../GLOSSARY.md#relative-path) onto it, trimming the root's trailing separator and the path's leading
+one, so a path given with or without a leading separator produces the same result.
 
 `Paths` holds the roots and does nothing else with them. It does not work out where they are, check that they exist,
 or create them. Nothing binds it into the container, and only tests construct it.
 
 ## Loading
 
-`TomlLoader::load(Paths $paths): array` builds the configuration tree:
+`TomlLoader::load(Paths $paths): array` builds the [configuration tree](../GLOSSARY.md#configuration-tree):
 
 1. `config.toml` is parsed from the configuration directory.
 2. Its top level is checked for the reserved keys `modules` and `__enabled_modules`.
-3. Every `*.toml` in `config.d` is parsed in filename order, checked for the same reserved keys, and merged over the
-   tree in turn. A missing directory is treated as empty.
+3. Every `*.toml` in `config.d`, each one a [drop-in](../GLOSSARY.md#drop-in), is parsed in filename order, checked for
+   the same reserved keys, and merged over the tree in turn. A missing directory is treated as empty.
 4. Every `*.toml` in `modules-enabled` is parsed in filename order and placed under `modules`, keyed by its filename
    without the extension. A missing directory is treated as empty.
 5. Those identifiers, in the same order, are placed under `__enabled_modules`.
 6. Environment variables are interpolated throughout the tree.
 
-Only files with a `.toml` extension are read. Dots separate the segments of a section path, and a module identifier
-containing one throws.
+Only files with a `.toml` extension are read. Dots separate the segments of a [section](../GLOSSARY.md#section) path,
+and a [module identifier](../GLOSSARY.md#module-identifier) containing one throws.
 
 ```php
 [
@@ -44,9 +46,9 @@ containing one throws.
 
 ### Merging
 
-A drop-in is merged over the tree from the top level down. Where both values are arrays and neither is a non-empty
-list, they merge recursively. Otherwise the drop-in's value replaces the tree's, so lists and arrays of tables are
-replaced whole rather than merged.
+A [drop-in](../GLOSSARY.md#drop-in) is merged over the tree from the top level down. Where both values are arrays and
+neither is a non-empty list, they merge recursively. Otherwise the drop-in's value replaces the tree's, so lists and
+arrays of tables are replaced whole rather than merged.
 
 An empty array is not treated as a list, so an empty drop-in file merges as a no-op rather than replacing the tree.
 
@@ -68,17 +70,18 @@ Interpolation reads through `Env`, so `Env` is initialised before the loader run
 
 ## Configuration objects
 
-A configuration object implements `ConfigObject`, which requires `fromArray(array $data): static`. Each
-configuration is an instance of a class unique to it, per
+A [configuration object](../GLOSSARY.md#configuration-object) implements `ConfigObject`, which requires `fromArray(array
+$data): static`. Each configuration is an instance of a class unique to it, per
 [ADR-0005](../adr/0005-configuration-is-held-in-typed-objects.md), and its values are typed readonly properties.
 
-`ModulesEnabled` is the only core configuration object.
+`ModulesEnabled` is the only [core configuration](../GLOSSARY.md#core-configuration) object.
 
 ## The registry
 
-`ConfigRegistry` is the mutable half, sealed into `ConfigCatalogue`, per
-[ADR-0003](../adr/0003-mutable-registries-are-sealed-into-immutable-catalogues.md). It is constructed with the tree
-and the core mapping.
+`ConfigRegistry` is the configuration [registry](../GLOSSARY.md#registry), sealed into the `ConfigCatalogue`
+[catalogue](../GLOSSARY.md#catalogue), per
+[ADR-0003](../adr/0003-mutable-registries-are-sealed-into-immutable-catalogues.md). It is constructed with the
+[configuration tree](../GLOSSARY.md#configuration-tree) and the core mapping.
 
 | Method | Effect |
 |---|---|
@@ -99,21 +102,22 @@ It passes through three phases:
 twice, reading before the core seal or after the full seal, registering before the core seal or after the full seal,
 sealing twice, and sealing before the core seal.
 
-`CoreConfig::MAPPING` maps a top-level key of the tree to the class hydrated from it, and holds
-`__enabled_modules => ModulesEnabled` alone. A missing key hydrates from an empty array; a key holding anything
-other than an array throws. Core configuration is placed in the catalogue under the module `engine`, named by its
-key.
+`CoreConfig::MAPPING` maps a top-level key of the tree to the [core configuration](../GLOSSARY.md#core-configuration)
+class hydrated from it, and holds `__enabled_modules => ModulesEnabled` alone. A missing key hydrates from an empty
+array; a key holding anything other than an array throws. Core configuration is placed in the catalogue under the
+[module](../GLOSSARY.md#module) `engine`, named by its key.
 
-A module registration records the module, the name, and the section path `modules.{module}.{name}`. Registering
-under `engine` throws, and so does a module or name containing a dot. `seal()` walks that path into the tree, taking
-a missing segment as an empty array and throwing when a segment holds something that is not an array.
+A module registration records the module, the name, and the [section](../GLOSSARY.md#section) path
+`modules.{module}.{name}`. Registering under `engine` throws, and so does a module or name containing a dot. `seal()`
+walks that path into the tree, taking a missing segment as an empty array and throwing when a segment holds something
+that is not an array.
 
 Any failure while hydrating is wrapped in `InvalidConfigException`, naming the file and section it came from.
 
 ## The catalogue
 
-`ConfigCatalogue` is constructed with the configuration objects, keyed by module and then by name, and builds a map
-from each object's class to its module and name.
+`ConfigCatalogue` is constructed with the [configuration object](../GLOSSARY.md#configuration-object)s, keyed by
+[module](../GLOSSARY.md#module) and then by name, and builds a map from each object's class to its module and name.
 
 | Method | Effect |
 |---|---|

@@ -5,8 +5,9 @@ includes: [ADR-0007, RFC-0003]
 
 # Query builder
 
-Queries are built as objects that produce their own SQL and the values bound to it. A builder knows nothing of the
-connection it runs against, and a connection accepts either a builder or a string, per [Database](database.md).
+Each [query](../GLOSSARY.md#query) is built as an object that produces its own SQL and the values bound to it. A builder
+knows nothing of the [connection](../GLOSSARY.md#connection) it runs against, and a connection accepts either a builder
+or a string, per [Database](database.md).
 
 The SQL is MySQL's, per [ADR-0007](../adr/0007-mysql-and-mariadb-are-the-default-database.md): `REPLACE INTO`,
 `INSERT IGNORE`, `ON DUPLICATE KEY UPDATE` and `MATCH ... AGAINST` all appear in what it writes.
@@ -14,10 +15,11 @@ The SQL is MySQL's, per [ADR-0007](../adr/0007-mysql-and-mariadb-are-the-default
 ## Expressions
 
 `Expression` requires `toSql(): string` and `getBindings(): array`. `Query` extends it and adds nothing, marking a
-complete query. `Select`, `Insert`, `Update` and `Delete` implement `Query`; `WhereClause`, `JoinClause`, `Raw` and
-the built-in expressions implement `Expression`.
+complete [query](../GLOSSARY.md#query). `Select`, `Insert`, `Update` and `Delete` implement `Query`; `WhereClause`,
+`JoinClause`, `Raw` and the built-in expressions implement `Expression`.
 
-An expression containing others builds its SQL from theirs and gathers their bound values in the same order.
+An [expression](../GLOSSARY.md#expression) containing others builds its SQL from theirs and gathers their bound values
+in the same order.
 
 ## Select
 
@@ -47,8 +49,9 @@ SELECT [DISTINCT] {columns} FROM {table} {joins} WHERE {conditions} GROUP BY {co
 ORDER BY {columns} LIMIT {limit} OFFSET {offset}
 ```
 
-A clause with nothing added is left out. The bound values are gathered in a different order from the clauses: the
-table subquery first, then the column expressions, then joins, conditions, grouping, having and ordering.
+A clause with nothing added is left out. The bound values are gathered in a different order from the clauses: the table
+subquery first, then the column expressions, then joins, [condition](../GLOSSARY.md#condition)s, grouping, having and
+ordering.
 
 ## Insert
 
@@ -77,19 +80,19 @@ column list taken from the first row.
 | `set(array $values)` | Sets columns to values, merged with any set before. An expression value is written as SQL. |
 
 Written as `UPDATE {table} SET {values} WHERE {conditions} ORDER BY {columns} LIMIT {limit}`. The bound values are
-the set values, then the conditions, then the ordering.
+the set values, then the [condition](../GLOSSARY.md#condition)s, then the ordering.
 
 The column names in `SET` are written between backticks. Nothing else the builder writes is quoted.
 
 ## Delete
 
 `Delete::from(string $table)`, written as `DELETE FROM {table} WHERE {conditions} ORDER BY {columns} LIMIT {limit}`.
-The bound values are the conditions, then the ordering.
+The bound values are the [condition](../GLOSSARY.md#condition)s, then the ordering.
 
 ## Conditions
 
-`Select`, `Update` and `Delete` share one set of condition methods, each delegating to a `WhereClause`. Every method
-has an `or` form adding the condition with `OR` instead of `AND`.
+`Select`, `Update` and `Delete` share one set of [condition](../GLOSSARY.md#condition) methods, each delegating to a
+`WhereClause`. Every method has an `or` form adding the condition with `OR` instead of `AND`.
 
 | Method | Adds |
 |---|---|
@@ -114,8 +117,8 @@ When a column is given, the operator is required and is matched regardless of ca
 
 Any other operator throws `InvalidExpressionException`. An `IN` or `NOT IN` given an empty array throws.
 
-Given an expression rather than an array, `whereIn()` and `whereNotIn()` delegate to the raw form, so the subquery
-is written with the `AND` conjunction. The `or` forms delegate to the raw `or` form.
+Given an [expression](../GLOSSARY.md#expression) rather than an array, `whereIn()` and `whereNotIn()` delegate to the
+raw form, so the subquery is written with the `AND` conjunction. The `or` forms delegate to the raw `or` form.
 
 ## Joins
 
@@ -134,17 +137,18 @@ Given two columns and an operator, the join compares them. Given a closure, it r
 | `where(string $column, string $operator, mixed $value)` | A comparison against a bound value, joined with `AND`. |
 | `orWhere()` | The same, joined with `OR`. |
 
-A join's conditions follow `ON`. A join with no conditions has no `ON`, which is how a cross join is written.
+A join's [condition](../GLOSSARY.md#condition)s follow `ON`. A join with no conditions has no `ON`, which is how a cross
+join is written.
 
 ## Grouping, having, ordering and limits
 
 `groupBy(Expression|string ...$columns)` appends columns, so calling it again adds to those already grouped by.
 
 `having()`, `orHaving()`, `havingRaw()` and `orHavingRaw()` add to a second `WhereClause`, so a having clause is
-built from the same conditions as a where clause.
+built from the same [condition](../GLOSSARY.md#condition)s as a where clause.
 
-`orderBy(Expression|string $column, string $direction = 'asc')` appends a column. A direction of `desc` in any case
-orders descending, and every other value, recognised or not, orders ascending.
+`orderBy(Expression|string $column, string $direction = 'asc')` appends a column. A direction of `desc`, matched
+regardless of case, orders descending. Every other value, recognised or not, orders ascending.
 
 `limit(int $limit)` and `offset(int $offset)` are written into the SQL as integers rather than bound. An offset set
 without a limit is written on its own.
@@ -152,7 +156,7 @@ without a limit is written on its own.
 ## Raw SQL
 
 `Raw::from(string $sql, array $bindings = [])` holds SQL and its bound values, and can be used wherever an
-expression is accepted. `Expressions::raw()` does the same through a separate class.
+[expression](../GLOSSARY.md#expression) is accepted. `Expressions::raw()` does the same through a separate class.
 
 ## Built-in expressions
 
@@ -165,7 +169,7 @@ expression is accepted. `Expressions::raw()` does the same through a separate cl
 | `whereColumn(string $operator, string $column, mixed $value)` | The comparison for the operator. |
 | `raw(string $sql, array $bindings)` | The SQL as given. |
 
-An aggregate's column may be an expression, whose SQL is written inside the function.
+An aggregate's column may be an [expression](../GLOSSARY.md#expression), whose SQL is written inside the function.
 
 ## Errors
 

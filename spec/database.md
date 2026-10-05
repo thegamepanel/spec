@@ -5,17 +5,18 @@ includes: [ADR-0002, ADR-0007, ADR-0008, RFC-0003]
 
 # Database
 
-Database access is built directly on PDO, per
-[ADR-0008](../adr/0008-database-access-is-built-directly-on-pdo.md). Any number of named connections are
-configured, one is the primary, and a connection executes queries and manages transactions.
+Database access is built directly on PDO, per [ADR-0008](../adr/0008-database-access-is-built-directly-on-pdo.md). Any
+number of named [connection](../GLOSSARY.md#connection)s are configured, one of them is the
+[primary connection](../GLOSSARY.md#primary-connection), and a connection executes queries and manages transactions.
 
 Only MySQL is reachable, per [ADR-0007](../adr/0007-mysql-and-mariadb-are-the-default-database.md). The driver is
 not configurable: `ConnectionConfig` sets it to `mysql` in its constructor.
 
 ## Configuration
 
-`DatabaseConfig` and `ConnectionConfig` are configuration objects, hydrated through `fromArray()`. Array shapes are
-asserted there, and value rules in each constructor, so `make()` cannot bypass them.
+`DatabaseConfig` and `ConnectionConfig` are [configuration object](../GLOSSARY.md#configuration-object)s, hydrated
+through `fromArray()`. Array shapes are asserted there and value rules are checked in each constructor, so `make()`
+cannot bypass them.
 
 | `DatabaseConfig` | Rule |
 |---|---|
@@ -35,16 +36,16 @@ asserted there, and value rules in each constructor, so `make()` cannot bypass t
 
 ## Connections
 
-`ConnectionFactory` is constructed with the `DatabaseConfig` and hands out connections:
+`ConnectionFactory` is constructed with the `DatabaseConfig` and hands out [connection](../GLOSSARY.md#connection)s:
 
 ```php
 $primary = $factory->make();
 $replica = $factory->make('replica');
 ```
 
-`make(?string $name = null)` uses the primary connection's name when none is given, returns a connection already
-created under that name, and otherwise builds one and keeps it for the life of the factory. A name with no
-configuration throws `ConnectionException`, and so does a PDO failure while connecting.
+`make(?string $name = null)` uses the [primary connection](../GLOSSARY.md#primary-connection)'s name when none is given.
+It returns the connection already created under that name, or otherwise builds one and keeps it for the life of the
+factory. A name with no configuration throws `ConnectionException`, and so does a PDO failure while connecting.
 
 The DSN is built from the configuration:
 
@@ -71,9 +72,9 @@ precedence over the default of the same name, the error mode included.
 
 ### Injection
 
-A connection is injected into a parameter typed exactly `Connection` and carrying the `Database` attribute, which is
-a resolvable attribute paired with `DatabaseResolver`, per
-[ADR-0002](../adr/0002-dependencies-select-their-instance-through-parameter-attributes.md).
+A [connection](../GLOSSARY.md#connection) is injected into a parameter typed exactly `Connection` and carrying the
+`Database` attribute, which is a [resolvable attribute](../GLOSSARY.md#resolvable-attribute) paired with
+`DatabaseResolver`, per [ADR-0002](../adr/0002-dependencies-select-their-instance-through-parameter-attributes.md).
 
 ```php
 public function __construct(
@@ -82,9 +83,10 @@ public function __construct(
 ) {}
 ```
 
-The resolver returns the connection for the attribute's name, so a parameter with no name receives the primary. It
-throws `DatabaseException` when the dependency's resolvable attribute is not `Database`, and when the parameter's
-type is not exactly `Connection`.
+The [resolver](../GLOSSARY.md#resolver) returns the connection the attribute names, and the
+[primary connection](../GLOSSARY.md#primary-connection) when it names none. It throws `DatabaseException` when the
+[dependency](../GLOSSARY.md#dependency)'s resolvable attribute is not `Database`, and when the parameter's type is not
+exactly `Connection`.
 
 ## Executing
 
@@ -96,8 +98,8 @@ type is not exactly `Connection`.
 | `execute(Expression\|string $query, array $bindings = [])` | A `WriteResult`. |
 | `stream(Expression\|string $query, array $bindings = [])` | A `Cursor`. |
 
-Each takes SQL as a string with its bound values, or an expression, whose SQL and bound values are read from
-`toSql()` and `getBindings()`. Bound values given alongside an expression are discarded.
+Each takes SQL as a string with its bound values, or an [expression](../GLOSSARY.md#expression), whose SQL and bound
+values are read from `toSql()` and `getBindings()`. Bound values given alongside an expression are discarded.
 
 Every statement is prepared and then executed. Booleans among the bound values are converted to integers first. A
 statement that cannot be prepared or executed throws `QueryException`, which carries the SQL and bound values
@@ -108,7 +110,7 @@ returns after an update or a delete is whatever that connection last inserted.
 
 ### Results
 
-`Result` fetches every row the first time any row is read, and keeps them.
+`Result` fetches every [row](../GLOSSARY.md#row) the first time any row is read, and keeps them.
 
 | Method | Effect |
 |---|---|
@@ -128,7 +130,7 @@ affected. `Result`, `Cursor` and `WriteResult` each carry the bound values they 
 
 ### Rows
 
-A `Row` holds one row's values, keyed by column name.
+A `Row` holds one [row](../GLOSSARY.md#row)'s values, keyed by column name.
 
 | Method | Effect |
 |---|---|
@@ -152,7 +154,7 @@ are no savepoints.
 ## Migrations
 
 `Migrator` is an empty class. Nothing runs migrations, records which have run, or rolls one back. The `Migration`
-and `ReversibleMigration` contracts exist under the schema builder.
+and `ReversibleMigration` contracts are part of the [schema builder](schema.md).
 
 ## Errors
 

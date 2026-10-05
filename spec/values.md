@@ -6,8 +6,8 @@ includes: []
 # Values
 
 Type-coerced access to values held in an array, keyed by name. `ValueGetter` provides it as static methods, and
-`GetsAsType` is the contract an object implements to expose the same five casts over its own data. `Row` is the one
-implementation, per [Database](database.md).
+`GetsAsType` is the contract an object implements to expose the same five casts over its own data. `Row`, the class
+holding a [row](../GLOSSARY.md#row), is the one implementation, per [Database](database.md).
 
 ## Casting
 
@@ -22,11 +22,11 @@ cast throws `InvalidValueCastException`, naming the value and the type it could 
 | `bool(string $name, array $values)` | A boolean, an integer cast to a boolean, or one of the strings `true`, `1`, `yes`, `false`, `0`, `no`. | Throws, including for any other string. |
 | `array(string $name, array $values)` | An array, or a string holding valid JSON, decoded. | Throws. |
 
-A name that is absent from the array is read as `null`, and `null` satisfies none of the casts, so a missing value
-and a `null` value fail the same way and are not distinguishable from the cast alone.
+A name that is absent from the array is read as `null`, and `null` satisfies none of the casts. A missing value and a
+`null` value fail the same way, and the cast alone cannot tell them apart.
 
-`string()` does not accept a boolean. `bool()` accepts an integer, and `int()` accepts a numeric string, so the
-casts are not symmetrical with one another.
+The casts are not symmetrical with one another. `string()` does not accept a boolean, but `bool()` accepts an
+integer. `int()` accepts a numeric string.
 
 `array()` validates a string with `json_validate()` before decoding, and decodes with `JSON_THROW_ON_ERROR` to a
 depth of 512.

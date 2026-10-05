@@ -6,29 +6,32 @@ includes: [ADR-0002, ADR-0004, RFC-0001]
 # Container
 
 The dependency injection container constructs objects and supplies their dependencies. A class is resolved from a
-binding, or automatically from its constructor signature. Any callable, method or constructor is invoked with its
-parameters supplied.
+[binding](../GLOSSARY.md#binding), or automatically from its constructor signature. Any callable, method or constructor
+is invoked with its parameters supplied.
 
-`Engine\Container\Container` is constructed with a resolver catalogue and a binding catalogue, and holds the shared
-instances it resolves. It exposes `resolve()` and `invoke()`, and its binding catalogue is readable. It does not
-implement PSR-11, per [ADR-0004](../adr/0004-the-container-does-not-implement-psr-11.md).
+`Engine\Container\Container` is constructed with a [resolver](../GLOSSARY.md#resolver)
+[catalogue](../GLOSSARY.md#catalogue) and a binding catalogue, and holds the [shared](../GLOSSARY.md#shared) instances
+it resolves. It exposes `resolve()` and `invoke()`, and its binding catalogue is readable. It does not implement PSR-11,
+per [ADR-0004](../adr/0004-the-container-does-not-implement-psr-11.md).
 
 ```php
 $container = new Container($resolvers, $bindings);
 
-$instance = $container->resolve(Resolution::for(Contract::class));
+$instance = $container->resolve(Resolution::for(ServerRepository::class));
 $result   = $container->invoke(Invocation::method($handler, 'handle'));
 ```
 
 ## Assembling the catalogues
 
-`BindingCatalogue` and `ResolverCatalogue` are constructed directly from arrays. `BindingRegistry` and
-`ResolverRegistry` collect registrations, but neither has a method that produces a catalogue, so nothing converts
-one into the other. Tests construct catalogues themselves.
+The `BindingCatalogue` and `ResolverCatalogue` [catalogue](../GLOSSARY.md#catalogue)s are constructed directly from
+arrays. The `BindingRegistry` and `ResolverRegistry` [registry](../GLOSSARY.md#registry) classes collect registrations,
+but neither has a method that produces a catalogue, so nothing converts one into the other. Tests construct catalogues
+themselves.
 
-`BindingRegistry` is created for a module scope, and `bind()` returns a `BindingBuilder` carrying that scope.
-Several builders accumulate under one abstract, which is how named and qualified child bindings sit alongside the
-main binding. `ResolverRegistry` holds `default()` and `register()`.
+`BindingRegistry` is created for a [module scope](../GLOSSARY.md#module-scope), and `bind()` returns a `BindingBuilder`
+carrying that scope. Several builders accumulate under one [abstract](../GLOSSARY.md#abstract), which is how a
+[named binding](../GLOSSARY.md#named-binding) or a [qualified binding](../GLOSSARY.md#qualified-binding) sits alongside
+the main [binding](../GLOSSARY.md#binding). `ResolverRegistry` holds `default()` and `register()`.
 
 ## Bindings
 
@@ -43,29 +46,31 @@ main binding. `ResolverRegistry` holds `default()` and `register()`.
 | `lazily()` | Marks the binding lazy. |
 | `notShared()` | Resolves a new instance every time. |
 
-A builder's `shared` flag defaults to `true`. `Binding::from()` turns a builder into an immutable `Binding`, adding
-the concrete class to the aliases when one is set. A `Binding` holds the abstract, concrete class, instance,
-aliases, factory, a map of named children, a map of qualified children keyed by qualifier class, and the liminal,
-lazy and shared flags. It answers `isBoundToInstance()` and `hasFactory()`.
+A builder's `shared` flag defaults to `true`. `Binding::from()` turns a builder into an immutable `Binding`, adding the
+[concrete](../GLOSSARY.md#concrete) class to the [alias](../GLOSSARY.md#alias) list when one is set. A `Binding` holds
+the abstract, concrete class, instance, aliases, factory, a map of named children, a map of qualified children keyed by
+qualifier class, and the [liminal](../GLOSSARY.md#liminal), lazy and shared flags. It answers `isBoundToInstance()` and
+`hasFactory()`.
 
 ### Looking one up
 
 `BindingCatalogue::get(string $class, ?Named $named = null, ?Qualifier $qualifier = null)`:
 
-1. The class is replaced by the abstract its alias points to. The alias map is consulted once, so an alias pointing
-   at another alias is not followed.
-2. With no binding for the class, the result is `null`.
+1. The class is replaced by the [abstract](../GLOSSARY.md#abstract) its [alias](../GLOSSARY.md#alias) points to. The
+   alias map is consulted once, so an alias pointing at another alias is not followed.
+2. With no [binding](../GLOSSARY.md#binding) for the class, the result is `null`.
 3. With a name, the result is the named child binding, or `null`.
 4. With a qualifier, the result is the child binding stored under the qualifier's class, or `null`.
 5. Otherwise the binding itself.
 
-The catalogue also holds a map of module scope to the classes bound under it. Nothing reads it.
+The catalogue also holds a map of [module scope](../GLOSSARY.md#module-scope) to the classes bound under it. Nothing
+reads it.
 
 ## Resolving
 
 `resolve(Resolution $resolution, bool $skipLazy = false)`:
 
-1. **A cached instance** is returned if one is held for the resolution.
+1. **A cached instance** is returned if one is held for the [resolution](../GLOSSARY.md#resolution).
 2. **A lazy proxy** is returned if the resolution asks to be lazy and lazy resolution is not being skipped.
 3. **The binding** for the class, name and qualifier is looked up.
 4. **The flags** are read: the instance and factory from the binding, `shared` from the binding or `false` when
@@ -78,8 +83,8 @@ The catalogue also holds a map of module scope to the classes bound under it. No
    resolution liminal.
 7. **Sharing.** A shared resolution is cached and returned; an unshared one is returned without being cached.
 
-A class with a binding is shared unless the binding says otherwise. A class with no binding is not shared: `shared`
-is read as `false` when there is no binding.
+A class with a [binding](../GLOSSARY.md#binding) is shared unless the binding says otherwise. A
+class with no binding is not shared: `shared` is read as `false` when there is no binding.
 
 ### Caching
 
@@ -92,27 +97,29 @@ Instances are held in four maps:
 | Qualified instances | Class, then a list | Pairs of qualifier and instance. |
 | Liminal instances | Class | A weak reference, returning the instance while it is alive. |
 
-A qualified instance is found by walking the list for the class and comparing each entry's qualifier: its class
-must match, and `equals()` must return true. `Qualifier` declares `equals(self $other): bool` for this.
+A qualified instance is found by walking the list for the class and comparing each entry's qualifier: its class must
+match, and `equals()` must return true. `Qualifier` declares `equals(self $other): bool` for this.
 
-A liminal instance is stored under its class alone, whether or not the resolution was named or qualified.
+A [liminal](../GLOSSARY.md#liminal) instance is stored under its class alone, whether or not the
+[resolution](../GLOSSARY.md#resolution) was named or qualified.
 
 Reading and writing use different keys. A read looks under the class the resolution names; a write stores under the
-binding's abstract where there is a binding. A shared binding resolved through an alias is therefore stored under
-the abstract and looked for under the alias, and produces a new instance each time.
+binding's [abstract](../GLOSSARY.md#abstract) where there is a [binding](../GLOSSARY.md#binding). A shared binding
+resolved through an [alias](../GLOSSARY.md#alias) is therefore stored under the abstract and looked for under the alias,
+and produces a new instance each time.
 
 ### Lazy proxies
 
-A lazy resolution returns a proxy created with PHP's `newLazyProxy()`. When the proxy is first used, the container
-resolves the same resolution with lazy resolution skipped, so a proxy's own initialisation cannot produce another
-proxy.
+A lazy [resolution](../GLOSSARY.md#resolution) returns a [lazy proxy](../GLOSSARY.md#lazy-proxy) created with PHP's
+`newLazyProxy()`. When the proxy is first used, the container resolves the same resolution with lazy resolution skipped,
+so a proxy's own initialisation cannot produce another proxy.
 
 ### Ghost objects
 
-`GhostResolver` handles the `Ghost` attribute. It takes the class from the dependency's type, and throws when the
-type is absent or is not a class or interface. The binding's concrete class is used when there is one, and the
-parameter's class otherwise. The object is created with `newLazyGhost()`, and its constructor is invoked through the
-container when it is first used.
+`GhostResolver` handles the `Ghost` attribute. It takes the class from the [dependency](../GLOSSARY.md#dependency)'s
+type, and throws when the type is absent or is not a class or interface. The [binding](../GLOSSARY.md#binding)'s
+[concrete](../GLOSSARY.md#concrete) class is used when there is one, and the parameter's class otherwise. The object is
+created with `newLazyGhost()`, and its constructor is invoked through the container when it is first used.
 
 ## Invoking
 
@@ -131,26 +138,28 @@ variadic parameter ends the list and is never supplied. Every other parameter be
 
 ## Dependencies
 
-A `Dependency` carries the parameter's name, its type, whether it is optional, its `Named` attribute, its qualifier
-attribute, its resolvable attribute, whether it has a default, that default, and whether it is liminal. The
-qualifier and resolvable attributes are matched by interface, so any attribute implementing `Qualifier` or
+A [dependency](../GLOSSARY.md#dependency) is described by a `Dependency`, which carries the parameter's name, its type,
+whether it is optional, its `Named` attribute, its [qualifier](../GLOSSARY.md#qualifier) attribute, its
+[resolvable attribute](../GLOSSARY.md#resolvable-attribute), whether it has a default, that default, and whether it is
+liminal. The qualifier and resolvable attributes are matched by interface, so any attribute implementing `Qualifier` or
 `Resolvable` is found.
 
-A dependency carrying both a name and a qualifier throws. A dependency carrying a resolvable attribute is resolved
-by the resolver registered against that attribute's class, and by the default resolver otherwise. A resolver is
-itself resolved through the container, lazily, the first time it is needed, and the same instance is used
-afterwards.
+A dependency carrying both a name and a qualifier throws. A dependency carrying a resolvable attribute is resolved by
+the [resolver](../GLOSSARY.md#resolver) registered against that attribute's class, and by the default resolver
+otherwise. A resolver is itself resolved through the container, lazily, the first time it is needed, and the same
+instance is used afterwards.
 
 ### Resolving by type
 
-`GenericResolver` is the default resolver:
+`GenericResolver` is the default [resolver](../GLOSSARY.md#resolver):
 
-- **A class or interface type** is resolved through the container, carrying over the dependency's name, qualifier
-  and liminality. A named type that is neither a class nor an interface yields the default, or `null` where the type
-  allows it, and otherwise throws.
-- **An intersection type** needs a binding for at least one member type. Each is tried in turn, using its instance,
-  resolving its concrete class, or invoking its factory. The first result satisfying every member type is used. A
-  binding whose class cannot be reflected is skipped. With no result, the default is used, and otherwise it throws.
+- **A class or interface type** is resolved through the container, carrying over the
+  [dependency](../GLOSSARY.md#dependency)'s name, [qualifier](../GLOSSARY.md#qualifier) and liminality. A named type
+  that is neither a class nor an interface yields the default, or `null` where the type allows it, and otherwise throws.
+- **An intersection type** needs a [binding](../GLOSSARY.md#binding) for at least one member type. Each is tried in
+  turn, using its instance, resolving its concrete class, or invoking its factory. The first result satisfying every
+  member type is used. A binding whose class cannot be reflected is skipped. With no result, the default is used, and
+  otherwise it throws.
 - **A union type** is resolved when exactly one member is a class, an interface or an intersection, by resolving
   that member. Otherwise the default is used, then `null` where the type allows it, and otherwise it throws.
 - **No type** yields the default, and throws when there is none.
@@ -166,10 +175,11 @@ afterwards.
 | `NoResolution` | Class, parameter | On a class, the class is never constructed automatically. |
 | `Ghost` | Parameter | Resolves the dependency as a ghost object. |
 
-`Lazy`, `Liminal`, `NoResolution` and `Ghost` each implement `Resolvable`. On a parameter, all four are therefore
-found as the dependency's resolvable attribute, and resolution is handed to the resolver registered against that
-attribute's class. `Ghost` has one. The other three resolve only where a resolver has been registered for them, and
-otherwise throw `InvalidResolverException`. `Liminal` on a parameter also sets the dependency's liminal flag.
+`Lazy`, `Liminal`, `NoResolution` and `Ghost` each implement `Resolvable`. On a parameter, all four are therefore found
+as the [dependency](../GLOSSARY.md#dependency)'s [resolvable attribute](../GLOSSARY.md#resolvable-attribute), and
+resolution is handed to the [resolver](../GLOSSARY.md#resolver) registered against that attribute's class. `Ghost` has
+one. The other three resolve only where a resolver has been registered for them, and otherwise throw
+`InvalidResolverException`. `Liminal` on a parameter also sets the dependency's liminal flag.
 
 The three markers take effect as described above when they are read from a class.
 
