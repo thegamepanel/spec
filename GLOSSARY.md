@@ -86,6 +86,10 @@ A unit of work that whatever drives the dependency injection container opens and
 
 A parameter the dependency injection container has to supply, described by its name, type, default, and the attributes that affect its resolution.
 
+## Deployment
+
+One change to the code an installation runs, applied as a unit: a new binary, or installing, updating or purging one external module.
+
 ## Disposal
 
 Releasing what a cycle instance holds when its cycle closes, such as an open transaction, a buffered log writer or an unsaved session.
@@ -170,6 +174,10 @@ The resolved metadata describing one module, such as its identifier, version, de
 
 The listeners that match one concrete event class, in the order they were registered. It is worked out the first time an event of that class is dispatched, and kept.
 
+## Migration map
+
+A record carried by each released version of an external module, mapping each of its migrations to the version that introduced it, which a downgrade reads to find what to reverse.
+
 ## Module
 
 The unit the panel is extended with, first-party and third-party alike, and the owner a configuration is registered against. The engine's own configuration is registered against a module like any other, and a core feature that combines several components is a module itself.
@@ -213,6 +221,10 @@ A thin wrapper, with no policy, over something PostgreSQL provides that a later 
 ## Provider
 
 An object injected in place of an instance, which resolves that class each time it is asked, against whichever cycle is open at that moment. A longer-lived object uses one to reach an instance belonging to the current cycle.
+
+## Purge
+
+Removing an external module together with its schema and its ledger rows, after reversing what its migrations changed outside that schema.
 
 ## Qualified binding
 
