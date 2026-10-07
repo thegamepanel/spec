@@ -158,6 +158,10 @@ How long the dependency injection container keeps an instance it has resolved: f
 
 Describes an instance that is shared but held by the dependency injection container through a weak reference, so that garbage collection can clear it once nothing else uses it, after which the next resolution produces a new instance.
 
+## Maintenance mode
+
+A state the panel is put into while something that must not run alongside requests is under way, such as migrations, in which it refuses requests.
+
 ## Manifest
 
 The resolved metadata describing one module, such as its identifier, version, declared capabilities and registrar class.
