@@ -1,9 +1,9 @@
 ---
 id: RFC-0007
 title: Binding lifetimes
-status: proposed
+status: accepted
 created: 2026-09-15
-decided:
+decided: 2026-10-11
 depends: [ADR-0009, ADR-0014]
 updates: [RFC-0001, RFC-0006]
 obsoletes: []

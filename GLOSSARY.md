@@ -16,7 +16,7 @@ The module scope at the top of the scope stack, which a resolution runs under.
 
 ## Binding
 
-Registered resolution information for one class or interface in the dependency injection container: the concrete class to construct in its place, an instance, or a factory, together with its aliases, its named and qualified child bindings, and whether it is shared, liminal or lazy.
+Registered resolution information for one class or interface in the dependency injection container: the concrete class to construct in its place, an instance, or a factory, together with its aliases, its named and qualified child bindings, its lifetime, and whether it is liminal or lazy.
 
 ## Bundled module
 
@@ -168,7 +168,7 @@ How long the dependency injection container keeps an instance it has resolved: f
 
 ## Liminal
 
-Describes an instance that is shared but held by the dependency injection container through a weak reference, so that garbage collection can clear it once nothing else uses it, after which the next resolution produces a new instance.
+Describes a shared instance with a process lifetime, held by the dependency injection container through a weak reference, so that garbage collection can clear it once nothing else uses it, after which the next resolution produces a new instance.
 
 ## Maintenance mode
 
@@ -312,7 +312,7 @@ The part of the configuration tree a configuration object is hydrated from. Dots
 
 ## Shared
 
-Describes an instance that is resolved once, cached by the dependency injection container, and returned on every later resolution. Instances are shared by default, and one that is not shared is never cached.
+Describes an instance that the dependency injection container resolves once, caches, and returns on later resolutions for as long as its lifetime lasts, such as for the life of the worker or for one cycle. A transient instance is never shared.
 
 ## Slot
 
