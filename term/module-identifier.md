@@ -6,4 +6,4 @@ named_by: RFC-0004
 
 # Module identifier
 
-A module's name, taken from its configuration file in `modules-enabled` without the `.toml` extension. An identifier containing a dot throws.
+A module's name, such as `billing`, which a bundled module declares and an external module takes from its package name. An identifier containing a dot throws.

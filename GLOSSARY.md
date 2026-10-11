@@ -32,7 +32,7 @@ An immutable, read-only collection consumed at runtime, the counterpart of a reg
 
 ## Collection
 
-A component asking every enabled module to contribute, at a moment the component chooses, such as at boot or on first use.
+A component asking modules to contribute, at a moment the component chooses, such as every enabled module, at boot or on first use.
 
 ## Collector
 
@@ -88,7 +88,7 @@ A parameter the dependency injection container has to supply, described by its n
 
 ## Deployment
 
-One change to the code an installation runs, applied as a unit: a new binary, or installing, updating or purging one external module.
+One change to the code an installation runs, applied as a unit: a new binary, or installing, updating, downgrading or purging one external module.
 
 ## Disposal
 
@@ -154,6 +154,10 @@ Calling a callable, method or constructor with its parameters supplied by the de
 
 A stand-in that the dependency injection container returns in place of an instance not yet resolved. When the proxy is first used, the container resolves the real instance, and the proxy forwards to it from then on, remaining a proxy.
 
+## Ledger
+
+The table recording which migrations have run on an installation, for each module, and the deployment that applied each.
+
 ## Lifetime
 
 How long the dependency injection container keeps an instance it has resolved: for the life of the worker, for one cycle, or not at all, a new instance being resolved every time.
@@ -174,6 +178,10 @@ The resolved metadata describing one module, such as its identifier, version, de
 
 The listeners that match one concrete event class, in the order they were registered. It is worked out the first time an event of that class is dispatched, and kept.
 
+## Migration identity
+
+The name a migration declares for itself, stable across releases, by which the ledger and the migration map know it within its module. A released one is never removed from what its module collects.
+
 ## Migration map
 
 A record carried by each released version of an external module, mapping each of its migrations to the version that introduced it, which a downgrade reads to find what to reverse.
@@ -182,9 +190,13 @@ A record carried by each released version of an external module, mapping each of
 
 The unit the panel is extended with, first-party and third-party alike, and the owner a configuration is registered against. The engine's own configuration is registered against a module like any other, and a core feature that combines several components is a module itself.
 
+## Module dependency
+
+A module's declared need for another module, recorded in its manifest, such as for that module's tables to exist before its own refer to them. The module system checks declared dependencies and orders modules by them.
+
 ## Module identifier
 
-A module's name, taken from its configuration file in `modules-enabled` without the `.toml` extension. An identifier containing a dot throws.
+A module's name, such as `billing`, which a bundled module declares and an external module takes from its package name. An identifier containing a dot throws.
 
 ## Module scope
 
@@ -224,7 +236,7 @@ An object injected in place of an instance, which resolves that class each time 
 
 ## Purge
 
-Removing an external module together with its schema and its ledger rows, after reversing what its migrations changed outside that schema.
+Removing an external module together with its schema and its ledger rows, after reversing those of its migrations that can be reversed.
 
 ## Qualified binding
 

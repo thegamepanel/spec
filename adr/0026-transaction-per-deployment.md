@@ -27,9 +27,9 @@ not at all.
 
 We will run the migrations of one [deployment](../GLOSSARY.md#deployment) in one transaction: every
 [bundled module](../GLOSSARY.md#bundled-module)'s pending migrations when a binary is replaced, and one
-[external module](../GLOSSARY.md#external-module)'s when it is installed, updated or [purged](../GLOSSARY.md#purge). The
-record of which migrations have run will be written inside the same transaction. A deployment whose migrations fail will
-leave the schema, and that record, as they were before it.
+[external module](../GLOSSARY.md#external-module)'s when it is installed, updated, downgraded or
+[purged](../GLOSSARY.md#purge). The record of which migrations have run will be written inside the same transaction. A
+deployment whose migrations fail will leave the schema, and that record, as they were before it.
 
 ## Alternatives
 
