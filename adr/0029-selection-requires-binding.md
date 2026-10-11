@@ -1,9 +1,9 @@
 ---
 id: ADR-0029
 title: Require a binding for named and qualified resolutions
-status: proposed
+status: accepted
 created: 2026-10-08
-decided:
+decided: 2026-10-11
 depends: [ADR-0002, RFC-0001, RFC-0006]
 updates: []
 obsoletes: []
@@ -28,6 +28,12 @@ constructs the requested class, and the sharing step caches the instance under t
 qualifier then selects nothing, the instance is the requested class under a key that no binding defines, and a mistyped
 or unregistered name is never reported.
 
+A dependency carrying `Ghost` is resolved as a [ghost object](../GLOSSARY.md#ghost-object), which is created without a
+resolution. `GhostResolver` looks up the binding for the dependency's class and its name or qualifier itself, and
+creates the ghost for the binding's [concrete](../GLOSSARY.md#concrete) class, or for the requested class where there is
+none, as [RFC-0001](../rfc/0001-dependency-injection-container.md) describes. Where a name or qualifier finds no
+binding, the ghost is of the requested class, and the name or qualifier selects nothing in the same way.
+
 [RFC-0001](../rfc/0001-dependency-injection-container.md) defines `BindingNotFoundException` and lists no case that
 throws it.
 
@@ -38,6 +44,10 @@ We will treat a name or [qualifier](../GLOSSARY.md#qualifier) as selecting among
 whose lookup finds no [binding](../GLOSSARY.md#binding), because the abstract has no binding or because its binding has
 no child under that name or qualifier class, will throw `BindingNotFoundException` at the lookup, naming the class and
 the name or qualifier class, and will construct nothing. A resolution without a name or qualifier is unchanged.
+
+A [dependency](../GLOSSARY.md#dependency) resolved as a [ghost object](../GLOSSARY.md#ghost-object) will look up its
+binding the same way, and will throw the same exception where its name or qualifier finds no binding, instead of
+creating a ghost of the requested class.
 
 ## Alternatives
 
@@ -57,8 +67,8 @@ unregistered name in the same way.
 Easier:
 
 - A name or [qualifier](../GLOSSARY.md#qualifier) that matches no [binding](../GLOSSARY.md#binding) will fail at the
-  [resolution](../GLOSSARY.md#resolution) that asked for it, with an exception naming the class and the name or
-  qualifier class.
+  [resolution](../GLOSSARY.md#resolution) or [ghost object](../GLOSSARY.md#ghost-object) that asked for it, with an
+  exception naming the class and the name or qualifier class.
 - The [instance cache](../GLOSSARY.md#instance-cache) will hold named and qualified entries only for bindings that
   exist.
 
