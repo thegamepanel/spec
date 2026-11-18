@@ -5,11 +5,11 @@ includes: [ADR-0002, ADR-0007, ADR-0008, RFC-0003]
 
 # Database
 
-Database access is built directly on PDO, per [ADR-0008](../adr/0008-database-access-is-built-directly-on-pdo.md). Any
+Database access is built directly on PDO, per [ADR-0008](../adr/0008-direct-pdo.md). Any
 number of named [connection](../GLOSSARY.md#connection)s are configured, one of them is the
 [primary connection](../GLOSSARY.md#primary-connection), and a connection executes queries and manages transactions.
 
-Only MySQL is reachable, per [ADR-0007](../adr/0007-mysql-and-mariadb-are-the-default-database.md). The driver is
+Only MySQL is reachable, per [ADR-0007](../adr/0007-mysql-and-mariadb.md). The driver is
 not configurable: `ConnectionConfig` sets it to `mysql` in its constructor.
 
 ## Configuration
@@ -74,7 +74,7 @@ precedence over the default of the same name, the error mode included.
 
 A [connection](../GLOSSARY.md#connection) is injected into a parameter typed exactly `Connection` and carrying the
 `Database` attribute, which is a [resolvable attribute](../GLOSSARY.md#resolvable-attribute) paired with
-`DatabaseResolver`, per [ADR-0002](../adr/0002-dependencies-select-their-instance-through-parameter-attributes.md).
+`DatabaseResolver`, per [ADR-0002](../adr/0002-parameter-attributes.md).
 
 ```php
 public function __construct(

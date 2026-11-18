@@ -174,6 +174,10 @@ Describes a shared instance with a process lifetime, held by the dependency inje
 
 A state the panel is put into while something that must not run alongside requests is under way, such as migrations, in which it refuses requests.
 
+## Management command
+
+A command that maintains an installation, such as running migrations or installing a module, as opposed to the command that serves the panel.
+
 ## Manifest
 
 The resolved metadata describing one module, such as its identifier, version, declared capabilities and registrar class.

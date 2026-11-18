@@ -4,7 +4,7 @@ title: TOML configuration loading
 status: accepted
 created: 2026-03-30
 decided: 2026-06-01
-backfilled: 2026-09-14
+backfilled: 2026-11-18
 depends: [ADR-0003, ADR-0006, ADR-0010]
 updates: [RFC-0002, RFC-0003]
 obsoletes: []
@@ -14,50 +14,34 @@ obsoletes: []
 
 ## Abstract
 
-Configuration is read from TOML files: a main file, drop-in overrides applied in order, and one file for each enabled
-module, merged into a single tree with environment variables interpolated. A registry hydrates configuration objects
-from that tree in two seals, core configuration first so that the module system can read which modules are enabled,
-then each module's configuration, and produces the immutable configuration catalogue.
+I will read configuration from TOML files: a main file, [drop-in](../GLOSSARY.md#drop-in) overrides applied in order,
+and one file for each enabled [module](../GLOSSARY.md#module), merged into a single
+[configuration tree](../GLOSSARY.md#configuration-tree) with
+[environment variable](../GLOSSARY.md#environment-variable)s interpolated. A [registry](../GLOSSARY.md#registry) will
+hydrate [configuration object](../GLOSSARY.md#configuration-object)s from that tree in two seals,
+[core configuration](../GLOSSARY.md#core-configuration) first so that the module system can read which modules are
+enabled, then each module's configuration, and will produce the immutable configuration
+[catalogue](../GLOSSARY.md#catalogue).
 
 ## Motivation
 
-The panel's configuration is written in TOML files that sysadmins edit, per
-[ADR-0010](../adr/0010-configuration-files-are-toml.md). The configuration component holds configuration objects in
-a catalogue, per [RFC-0002](0002-configuration-objects.md), but has no way to read them from files.
+The panel's configuration is written in TOML files that sysadmins edit, as
+[ADR-0010](../adr/0010-toml-configuration.md) decides. The configuration component holds
+[configuration object](../GLOSSARY.md#configuration-object)s in a [catalogue](../GLOSSARY.md#catalogue), as
+[RFC-0002](0002-configuration-objects.md) describes, but has no way to read them from files.
 
-Modules provide configuration of their own. To register it, the module system needs to know which modules are
-enabled, and which modules are enabled is itself configuration, so it has to be readable before any module registers
-anything.
+[Module](../GLOSSARY.md#module)s provide configuration of their own. To register it, the module system needs to know
+which modules are enabled, and which modules are enabled is itself configuration, so it has to be readable before any
+module registers anything.
 
 ## Proposal
 
-### Concepts
+### Where configuration is read from
 
-| Term | Meaning |
-|---|---|
-| Main configuration file | `config.toml`, the base of the configuration. |
-| Drop-in | A TOML file in `config.d`, applied over the main configuration file. |
-| Module configuration file | A TOML file in `modules-enabled`, holding one module's configuration. Its presence enables the module. |
-| Module identifier | A module's name, taken from its module configuration file's name without the `.toml` extension. |
-| Configuration tree | The array produced by reading and merging every file. |
-| Section | The part of the configuration tree a configuration object is hydrated from. |
-| Core configuration | Configuration hydrated before the module system runs, because the module system needs it. |
-| Module configuration | Configuration a module registers, hydrated once every module has registered. |
-
-### Components
-
-| Component | Responsibility |
-|---|---|
-| `ConfigPaths` | Value object holding the paths the loader reads from. |
-| `TomlLoader` | Reads, merges and interpolates the TOML files into a configuration tree. |
-| `ConfigRegistry` | Mutable, and exists only during bootstrap. Hydrates configuration objects from the tree in two seals, and produces the `ConfigCatalogue`. |
-| `CoreConfig` | Maps top-level keys of the tree to core configuration classes. |
-| `ModulesEnabled` | Core configuration object holding the enabled module identifiers. |
-| `ConfigObject` | Contract every configuration object implements, hydrated through `fromArray()`. |
-
-### Paths
-
-The loader reads from three locations:
+Configuration will be read from three places: the main configuration file, `config.toml`, which is the base of the
+configuration; the [drop-in](../GLOSSARY.md#drop-in) directory, `config.d/`, whose files are applied over it; and the
+[module](../GLOSSARY.md#module) configuration directory, `modules-enabled/`, which holds one file for each enabled
+module. A module's file being present is what enables it.
 
 ```
 config.toml
@@ -69,27 +53,30 @@ modules-enabled/
     billing.toml
 ```
 
-`ConfigPaths` holds the absolute path of each: the main configuration file as `configFile`, the drop-in directory as
-`configDir`, and the module configuration directory as `modulesEnabledDir`. Bootstrap constructs it, from the
-environment, command-line flags or compiled defaults. The configuration component never works out paths itself.
+`ConfigPaths` will hold the absolute path of each, as `configFile`, `configDir` and `modulesEnabledDir`. Bootstrap will
+construct it from the environment, command-line flags or compiled defaults, and the configuration component will never
+work out a path itself.
 
-Modules that are installed but not enabled are a concern of the command line that enables and disables them. Only
-`modules-enabled` matters to loading.
+Modules that are installed but not enabled will be a concern of the command line that enables and disables them. Only
+`modules-enabled/` will matter to loading.
 
-### Loading
+### Building the tree
 
-`TomlLoader::load(ConfigPaths $paths): array` builds the configuration tree in these steps:
+`TomlLoader::load(ConfigPaths $paths): array` will read every file and return the
+[configuration tree](../GLOSSARY.md#configuration-tree), an array holding all of them. It will work in this order:
 
 1. The main configuration file is parsed. If it cannot be read or parsed, loading throws.
-2. The drop-ins are parsed in order of filename, and each is merged over the tree in turn. A missing drop-in
-   directory is treated as empty.
-3. The module configuration files are parsed in order of filename, and each is placed in the tree under `modules`,
-   keyed by its module identifier. A missing module configuration directory is treated as empty.
+2. The [drop-in](../GLOSSARY.md#drop-in)s are parsed in order of filename, and each is merged over the tree in turn. A
+   missing drop-in directory is treated as empty.
+3. The [module](../GLOSSARY.md#module) configuration files are parsed in order of filename, and each is placed in the
+   tree under `modules`, keyed by its [module identifier](../GLOSSARY.md#module-identifier), which is the file's name
+   without the `.toml` extension. A missing module configuration directory is treated as empty.
 4. The module identifiers, in the same order, are placed in the tree under `__enabled_modules`.
-5. Environment variables are interpolated throughout the tree, module configuration included.
+5. [Environment variable](../GLOSSARY.md#environment-variable)s are interpolated throughout the tree, module
+   configuration included.
 
-Only files with the `.toml` extension are read. The loader knows nothing of configuration objects: it translates
-files into an array.
+Only files with the `.toml` extension will be read. The loader will know nothing of
+[configuration object](../GLOSSARY.md#configuration-object)s: it translates files into an array, and nothing more.
 
 ```php
 [
@@ -99,24 +86,24 @@ files into an array.
 ]
 ```
 
-`modules` and `__enabled_modules` are reserved for the loader. The main configuration file or a drop-in declaring
-either at its top level throws, naming the file that declared it.
+`modules` and `__enabled_modules` will be reserved for the loader. The main configuration file or a drop-in that
+declares either at its top level will throw, naming the file that declared it.
 
-A module identifier cannot contain a dot, because dots separate the parts of a section's path. A module configuration
-file whose name contains a dot throws.
+A module identifier cannot contain a dot, because dots separate the parts of a
+[section](../GLOSSARY.md#section)'s path, so a module configuration file whose name contains a dot will throw.
 
 #### Merging
 
-A drop-in is merged over the tree by these rules, applied from the top level down:
+A [drop-in](../GLOSSARY.md#drop-in) will be merged over the tree from the top level down. A key that only the tree has
+is kept, and a key that only the drop-in has is added. Where both have a key:
 
-- A key only in the tree is kept, and a key only in the drop-in is added.
-- Where both have a key and either value is not an array, the drop-in's value replaces the tree's.
-- Where both values are arrays and either is a non-empty list, the drop-in's value replaces the tree's. Lists,
-  including arrays of tables, are never merged.
-- Otherwise both values are tables, and they are merged by these same rules.
+- If either value is not an array, the drop-in's value replaces the tree's.
+- If both are arrays and either is a non-empty list, the drop-in's value replaces the tree's. Lists, including arrays
+  of tables, are never merged.
+- Otherwise both are tables, and they are merged by these same rules.
 
-An empty array counts as a table, so an empty drop-in file changes nothing, and an empty array replaces a list but
-leaves a table as it was.
+An empty array counts as a table. An empty drop-in file therefore changes nothing, and an empty array replaces a list
+but leaves a table as it was.
 
 ```toml
 # config.toml
@@ -141,10 +128,12 @@ port = 3307
 After merging, `database.primary` is `main`, `database.hosts` is `["c"]`, and the `main` connection has the host
 `localhost` and the port `3307`.
 
-### Interpolation
+### Environment variables in configuration
 
-A string in the tree may contain any number of references to environment variables, each replaced by the variable's
-value read from `Env`, per [ADR-0006](../adr/0006-environment-variables-are-only-read-during-bootstrap.md):
+A string in the tree may contain any number of references to
+[environment variable](../GLOSSARY.md#environment-variable)s, each replaced by the variable's value as `Env` reads it,
+following [ADR-0006](../adr/0006-environment-at-bootstrap.md). A reference takes one of two
+forms:
 
 | Reference | Replaced with |
 |---|---|
@@ -161,26 +150,26 @@ region   = "${REGION:-eu-west}"
 tags     = ["${TAG_ONE}", "literal"]
 ```
 
-A variable name is made of uppercase letters, digits and underscores, and does not start with a digit. A reference
-using any other name, such as `${name}`, is left as it was written. Only strings are interpolated, including strings
-inside lists, and the result is always a string. Numbers, booleans and other values are left as they are.
-
-A variable that is not set and has no default throws, naming the variable and the path to the value, such as
+A variable's name is made of uppercase letters, digits and underscores, and does not start with a digit. A reference
+using any other name, such as `${name}`, will be left as it was written. Only strings will be interpolated, including
+strings inside lists, and the result will always be a string; numbers, booleans and other values will be left as they
+are. A variable that is not set and has no default will throw, naming the variable and the path to the value, such as
 `database.password` or `database.tags[0]`.
 
-Interpolation keeps secrets, such as database passwords, out of configuration files, which are plain text. Because
-it happens while the tree is loaded, `Env` must be initialised before the loader runs.
+Interpolation keeps secrets, such as database passwords, out of configuration files, which are plain text. Because it
+happens while the tree is loaded, `Env` must be initialised before the loader runs.
 
-### Configuration objects
+### Validating as configuration is hydrated
 
-`ConfigObject` requires `fromArray(array $data): static`, which creates the configuration object from its section of
-the tree. It replaces the `__set_state()` of [RFC-0002](0002-configuration-objects.md).
+`ConfigObject` will require `fromArray(array $data): static`, which creates a
+[configuration object](../GLOSSARY.md#configuration-object) from its [section](../GLOSSARY.md#section) of the tree. It
+will replace the `__set_state()` of [RFC-0002](0002-configuration-objects.md).
 
-A configuration object validates what it is given, and validation happens as it is hydrated. Its typed readonly
-properties enforce the shape and types of its values by construction. Assertions in its constructor enforce ranges,
-formats and the relationships between values, so an object created any other way, such as through a `make()`
-factory, is validated the same way. `fromArray()` asserts only that the keys it needs exist and have the right
-shape. A failed assertion throws.
+A configuration object will validate what it is given, as it is hydrated. Its typed readonly properties will enforce the
+shape and types of its values by construction. Assertions in its constructor will enforce ranges, formats and the
+relationships between values, so that an object created any other way, such as through a `make()` factory, is
+validated the same way. `fromArray()` will assert only that the keys it needs exist and have the right shape. A failed
+assertion throws.
 
 ```php
 final readonly class MailConfig implements ConfigObject
@@ -203,11 +192,13 @@ final readonly class MailConfig implements ConfigObject
 }
 ```
 
-### Registry
+### Hydrating in two seals
 
-`ConfigRegistry` is the mutable half of the configuration component, sealed into the immutable `ConfigCatalogue`,
-per [ADR-0003](../adr/0003-mutable-registries-are-sealed-into-immutable-catalogues.md). It is constructed with the
-configuration tree and the core mapping, and is discarded once it has been sealed.
+`ConfigRegistry` will be the configuration [registry](../GLOSSARY.md#registry), the mutable half of the configuration
+component, sealed into the immutable `ConfigCatalogue`, following
+[ADR-0003](../adr/0003-sealed-catalogues.md). It will be constructed with the
+[configuration tree](../GLOSSARY.md#configuration-tree) and the core mapping, will exist only during bootstrap, and will
+be discarded once it has been sealed.
 
 ```php
 $tree     = new TomlLoader()->load($paths);
@@ -223,14 +214,15 @@ $registry->register('admin', 'main', AdminConfig::class);
 $catalogue = $registry->seal();
 ```
 
-| Method | Effect |
-|---|---|
-| `sealCore(): void` | Hydrates every core configuration object. |
-| `for(string $class): ConfigObject` | Returns a hydrated core configuration object by its class. |
-| `register(string $module, string $name, string $class): void` | Registers a module's configuration class under the module and a name, to be hydrated by `seal()`. |
-| `seal(): ConfigCatalogue` | Hydrates every registered module configuration object, and returns the catalogue holding them and the core configuration. |
+Hydration will happen in a fixed sequence. First, `sealCore()` hydrates every
+[core configuration](../GLOSSARY.md#core-configuration) object. The [module](../GLOSSARY.md#module) system then reads
+which modules are enabled, through `for(string $class): ConfigObject`, which returns a hydrated core configuration
+object by its class. Each enabled module then registers its configuration classes, through
+`register(string $module, string $name, string $class)`, under its identifier and a name. Last,
+`seal(): ConfigCatalogue` hydrates every registered module configuration object and returns the
+[catalogue](../GLOSSARY.md#catalogue) holding them alongside the core configuration.
 
-The registry passes through three phases, and each method can only be called in some of them:
+The registry will pass through three phases, and each method will be callable only in some of them:
 
 | Phase | Entered by | Permits |
 |---|---|---|
@@ -238,12 +230,13 @@ The registry passes through three phases, and each method can only be called in 
 | Core sealed | `sealCore()` | `for()`, `register()` and `seal()` |
 | Sealed | `seal()` | Nothing. The catalogue is used instead. |
 
-A method called in a phase that does not permit it throws `ConfigLifecycleException`.
+A method called in a phase that does not permit it will throw `ConfigLifecycleException`.
 
 #### Core configuration
 
-Core configuration is what must be hydrated and available before the module system runs. `CoreConfig::MAPPING` maps
-a top-level key of the tree to the class hydrated from it:
+[Core configuration](../GLOSSARY.md#core-configuration) is what must be hydrated and available before the
+[module](../GLOSSARY.md#module) system runs. `CoreConfig::MAPPING` will map a top-level key of the tree to the class
+hydrated from it:
 
 ```php
 public const array MAPPING = [
@@ -251,21 +244,23 @@ public const array MAPPING = [
 ];
 ```
 
-`sealCore()` hydrates each class from its key. A missing key hydrates the class from an empty array, and a key holding
-anything other than an array throws. In the catalogue, core configuration is placed under the module `engine`, named
-by its key.
+`sealCore()` will hydrate each class from its key. A missing key will hydrate the class from an empty array, and a key
+holding anything other than an array will throw. In the [catalogue](../GLOSSARY.md#catalogue), core configuration will
+be placed under the module `engine`, named by its key.
 
-`ModulesEnabled` holds the enabled module identifiers as a list of strings, and nothing else. Its
-`has(string $module): bool` returns whether a module is enabled. It is the only core configuration.
+`ModulesEnabled` will hold the enabled [module identifier](../GLOSSARY.md#module-identifier)s as a list of strings, and
+nothing else, and its `has(string $module): bool` will say whether a module is enabled. It will be the only core
+configuration.
 
-The module system reads `ModulesEnabled` through `for()`, between the two seals. It does not scan the filesystem, or
-repeat the logic that decides which modules are enabled: the configuration component is the single source of which
-modules are enabled.
+The module system will read `ModulesEnabled` through `for()`, between the two seals. It will not scan the filesystem or
+repeat the logic that decides which modules are enabled: the configuration component will be the single source of
+which modules are enabled.
 
 #### Module configuration
 
-A module registers each of its configuration classes under its module identifier and a name. `seal()` hydrates the
-class from `modules.{module}.{name}` in the tree, which is the table `{name}` in the module's configuration file.
+A [module](../GLOSSARY.md#module) will register each of its configuration classes under its
+[module identifier](../GLOSSARY.md#module-identifier) and a name. `seal()` will hydrate the class from
+`modules.{module}.{name}` in the tree, which is the table `{name}` in the module's configuration file.
 
 ```toml
 # modules-enabled/admin.toml
@@ -277,17 +272,18 @@ value = "${ADMIN_VALUE}"
 $registry->register('admin', 'main', AdminConfig::class);
 ```
 
-A missing table hydrates the class from an empty array, and anything other than an array on that path throws. The
-module name `engine` is reserved for core configuration, and registering under it throws. So does registering with a
-module identifier or name that contains a dot.
+A missing table will hydrate the class from an empty array, and anything other than an array on that path will throw.
+The module name `engine` will be reserved for [core configuration](../GLOSSARY.md#core-configuration), and registering
+under it will throw. So will registering with a module identifier or a name that contains a dot.
 
-In the catalogue, each module configuration object is placed under its module and name, so both
-`$catalogue->get('admin', 'main')` and `$catalogue->for(AdminConfig::class)` return it.
+In the [catalogue](../GLOSSARY.md#catalogue), each module configuration object will be placed under its module and name,
+so both `$catalogue->get('admin', 'main')` and `$catalogue->for(AdminConfig::class)` return it.
 
 #### Hydration errors
 
-Any failure while a configuration object is hydrated is wrapped in `InvalidConfigException`, naming the file, section
-and key it came from, so that sysadmins can find the problem without guessing:
+Any failure while a [configuration object](../GLOSSARY.md#configuration-object) is hydrated will be wrapped in
+`InvalidConfigException`, naming the file, [section](../GLOSSARY.md#section) and key the problem came from, so that
+sysadmins can find it without guessing:
 
 ```
 Invalid config in modules-enabled/admin.toml at [main.value]: Value is not defined.
@@ -295,7 +291,7 @@ Invalid config in modules-enabled/admin.toml at [main.value]: Value is not defin
 
 ### Database configuration
 
-`DatabaseConfig` and `ConnectionConfig`, from [RFC-0003](0003-database-component.md), are hydrated through
+`DatabaseConfig` and `ConnectionConfig`, from [RFC-0003](0003-database-component.md), will be hydrated through
 `fromArray()`, with their validation in their constructors.
 
 ```toml
@@ -318,7 +314,7 @@ password = ""
 
 | `DatabaseConfig` key | Rule |
 |---|---|
-| `primary` | Required, and not empty. A connection must be configured under it. |
+| `primary` | Required, and not empty. A [connection](../GLOSSARY.md#connection) must be configured under it. |
 | `connections` | Required. A table of connections, keyed by name, with at least one. Each is a non-empty table hydrated into a `ConnectionConfig`, and a failure names the connection. |
 | `persistent` | Optional, and a boolean. Defaults to `false`. |
 
@@ -331,17 +327,24 @@ password = ""
 | `port` | Required when no socket is given, and an integer. |
 | `options` | Optional, and a table. |
 
-A connection through a host must configure its port, which no longer defaults to `3306`.
+A connection through a host will have to configure its port, which will no longer default to `3306`.
 
 ### Errors
 
-Every exception implements `ConfigException`, per [RFC-0002](0002-configuration-objects.md).
+Every exception will implement `ConfigException`, from [RFC-0002](0002-configuration-objects.md).
 
-| Exception | Extends | Thrown when |
-|---|---|---|
-| `InvalidConfigException` | `RuntimeException` | A file cannot be read or parsed, a reserved key is declared, a module configuration file's name contains a dot, an environment variable is not set and has no default, a section is not an array, or a configuration object fails to hydrate. |
-| `ConfigLifecycleException` | `LogicException` | A registry method is called in a phase that does not permit it, a module registers as `engine`, or a module identifier or configuration name contains a dot. |
-| `ConfigNotRegisteredException` | `RuntimeException` | `for()` is asked for a class that is not core configuration. |
+`InvalidConfigException`, a `RuntimeException`, will be thrown for anything wrong with the configuration itself: a file
+that cannot be read or parsed, a reserved key declared, a [module](../GLOSSARY.md#module) configuration file whose name
+contains a dot, an [environment variable](../GLOSSARY.md#environment-variable) that is not set and has no default, a
+[section](../GLOSSARY.md#section) that is not an array, or a [configuration object](../GLOSSARY.md#configuration-object)
+that fails to hydrate.
+
+`ConfigLifecycleException`, a `LogicException`, will be thrown for misuse of the [registry](../GLOSSARY.md#registry): a
+method called in a phase that does not permit it, a module registering as `engine`, or a module identifier or
+configuration name that contains a dot.
+
+`ConfigNotRegisteredException`, a `RuntimeException`, will be thrown when `for()` is asked for a class that is not
+[core configuration](../GLOSSARY.md#core-configuration).
 
 ### Out of scope
 
@@ -350,16 +353,11 @@ Every exception implements `ConfigException`, per [RFC-0002](0002-configuration-
 
 ## Alternatives considered
 
-The decisions this design rests on are recorded separately, with the alternatives each one rejected:
-
-- writing configuration in TOML rather than PHP, JSON or YAML, in
-  [ADR-0010](../adr/0010-configuration-files-are-toml.md)
-- sealing a mutable registry into an immutable catalogue in phases, in
-  [ADR-0003](../adr/0003-mutable-registries-are-sealed-into-immutable-catalogues.md)
-- reading environment variables only during bootstrap, in
-  [ADR-0006](../adr/0006-environment-variables-are-only-read-during-bootstrap.md)
-
-No other alternatives were weighed.
+This design rests on [ADR-0010](../adr/0010-toml-configuration.md), which writes configuration in TOML rather
+than PHP, JSON or YAML; [ADR-0003](../adr/0003-sealed-catalogues.md), which seals
+a mutable [registry](../GLOSSARY.md#registry) into an immutable [catalogue](../GLOSSARY.md#catalogue) in phases; and
+[ADR-0006](../adr/0006-environment-at-bootstrap.md), which reads
+[environment variable](../GLOSSARY.md#environment-variable)s only during bootstrap.
 
 ## Backwards compatibility
 

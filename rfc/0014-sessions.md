@@ -13,103 +13,93 @@ obsoletes: []
 
 ## Abstract
 
-We will add server-side sessions, keyed by a cookie and stored in the database, with flash state carrying one value from
+I will add server-side sessions, keyed by a cookie and stored in the database, with flash state carrying a value from
 the request that writes it to the request that follows. A session will be resolved once per
-[cycle](../GLOSSARY.md#cycle), loaded only when something reads it, and written only when something changed. The cookie
-will be set on the response during the request, and the record persisted when the cycle closes.
+[cycle](../GLOSSARY.md#cycle), loaded only when something reads it, and written only when something changed it. The
+cookie will be set on the response during the request, and the record persisted when the cycle closes.
 
 ## Motivation
 
 A server-rendered panel needs to remember who is using it between requests, and to carry a message across the
 redirect that follows a form submission. Neither is possible with the request alone.
 
-Sessions will be their own component rather than part of the HTTP layer. They will own a table, a store, an expiry
-policy and a pruning task, none of which is transport. What is HTTP-facing will be thin: reading a cookie, and writing
-one onto a response.
+Sessions will be a component of their own rather than part of the HTTP layer. They will own a table, a store, an
+expiry policy and a pruning task, none of which is transport. What faces HTTP will be thin: reading a cookie, and
+writing one onto a response.
 
 ## Proposal
 
-### Storage
+### Where a session lives
 
-A session will live in the database, and the cookie will carry nothing but an identifier. We rejected a
-self-contained cookie holding the session's data: it would save a read on every request, but it cannot be revoked.
-Suspending someone, or forcing them out, has to invalidate a live session, and a cookie that carries its own data
-stays valid until it expires.
+A session will live in the database, and its cookie will carry nothing but an identifier. I rejected a self-contained
+cookie holding the session's data: it would save a read on every request, but it cannot be revoked. Suspending someone,
+or forcing them out, has to invalidate a live session, and a cookie that carries its own data stays valid until it
+expires.
 
-`SessionStore` will be the contract for loading, persisting and removing records, and the database implementation will
-be the one that exists, named as the entity stores in [RFC-0013](0013-entities.md) are.
+`SessionStore` will be the contract for loading, persisting and removing records. The database implementation will be
+the only one, named as the entity stores in [RFC-0013](0013-entities.md) are.
 
-The record will hold:
+A record will hold:
 
 | Field | Purpose |
 |---|---|
 | Identifier | Names the record, and is what the cookie carries. |
 | Payload | What the session holds. |
 | Created, last seen | When it began, and when it was last used. |
-| Client address | Stored truncated, per [ADR-0022](../adr/0022-client-addresses-are-stored-truncated-by-default.md). |
-| User agent | As sent by the client. |
+| Client address | Stored truncated, per [ADR-0022](../adr/0022-truncated-client-addresses.md). |
+| User agent | As the client sent it. |
 | Expiry | When it lapses, whether by age or by idleness. |
 
-The address and user agent will be recorded so that a person reading the table, or a page listing their own
-sessions, can tell one from another. Neither will be used to decide whether a session is valid: binding a session to
-an address signs out anyone whose network changes, and binding it to a user agent breaks on a browser update.
+The address and user agent will be recorded so that someone reading the table, or a page listing a person's own
+sessions, can tell one session from another. Neither will decide whether a session is valid: binding a session to an
+address signs out anyone whose network changes, and binding it to a user agent breaks it on a browser update.
 
 ### Identifiers
 
-A session identifier will be 32 random bytes, hex encoded. It will not be an
-[entity identifier](../GLOSSARY.md#entity-identifier): those are ULIDs, as
-[ADR-0011](../adr/0011-identifiers-are-ulids-generated-in-php.md) records, which embed a timestamp and a counter and are
-therefore guessable from a known one. A session identifier is a bearer credential, so it has to be unguessable.
+A session identifier will be 32 random bytes, hex encoded. It will not be an [entity
+identifier](../GLOSSARY.md#entity-identifier). Those are ULIDs, as
+[ADR-0011](../adr/0011-ulid-identifiers.md) decides, and a ULID embeds a timestamp and a counter,
+so one can be guessed from another. A session identifier is a bearer credential, so it has to be unguessable.
 
-The identifier will be regenerated whenever privilege changes, which means signing in and any elevation.
+The identifier will be regenerated whenever privilege changes: on signing in, and on any elevation. Regenerating will
+write a new record and keep the old one for a short, configurable window as a [superseded
+record](../GLOSSARY.md#superseded-record) pointing at the new one. A request already in flight with the old identifier
+will then resolve to the new record, rather than failing or loading a stale copy of the session that it would write back
+when it ends. Superseded records will be removed by the same pruning that removes expired ones.
 
-Regenerating will write a new record and mark the old one as a [superseded record](../GLOSSARY.md#superseded-record),
-pointing at the new one, for a short configurable window. A request already in flight carrying the old identifier will
-resolve to the new record rather than to a stale copy of the session, which is what would otherwise be written back when
-that request ends. Superseded records will be removed by the same pruning that removes expired ones.
-
-### Lifetime and loading
+### Loading and writing
 
 A session will have the `Cycle` [lifetime](../GLOSSARY.md#lifetime) from [RFC-0007](0007-binding-lifetimes.md), so it
 will be resolved once per request and discarded when the [cycle](../GLOSSARY.md#cycle) closes.
 
-Loading will be lazy, and writing conditional:
+Loading will be lazy and writing conditional. A request that never touches the session will read nothing, and a
+session that nothing changed will write nothing.
 
-- A request that never touches the session will read nothing.
-- A session nothing changed will write nothing.
+A session that does write will write twice, at different moments. The cookie will be set on the response during the
+request, because the response is emitted before the cycle closes. The record will be persisted when the cycle closes, as
+the [disposal](../GLOSSARY.md#disposal) that [RFC-0007](0007-binding-lifetimes.md) describes. The client already has its
+response by then, so persisting costs it nothing.
 
-When a session does write, it will write twice, at different moments. The cookie will be written on the response, during
-the request, because the response is emitted before the cycle closes. The record will be written when the cycle closes.
-The client already has its response by then, so persisting will cost it nothing.
-
-Persisting at cycle close will be the [disposal](../GLOSSARY.md#disposal) described in
-[RFC-0007](0007-binding-lifetimes.md).
-
-### Concurrency
+### Concurrent requests
 
 Nothing will lock a session. A hypermedia page loads several fragments at once, so requests for one session arrive
-concurrently. PHP's own session handling serialises them by locking, which would make those fragments load one after
+concurrently. PHP's own session handling serialises them by locking, which would load those fragments one after
 another. The last write will win instead, which is why a session will hold little and change rarely.
 
-Flash will be the exception, and will carry a hazard: two concurrent requests can each read a flash value before either
+Flash will be the exception, and carries a hazard: two concurrent requests can each read a flash value before either
 clears it, or one can clear it before the other reads it. Flash will be written by the request that redirects and is
 meant for the document request that follows, so a fragment request must not consume it.
 
-### The session
+### Using a session
 
-`Session` will read, write and discard the session's data:
+A session will hold two types of state by key. Ordinary state will persist until something changes it: `put()` will
+hold a value, `get()` will return it, and `forget()` will drop it. Flash state will live for exactly the next request:
+a value held with `flash()` during one request will be readable in the next and gone after that, which is what carries
+a message across the redirect that follows a form submission. `get()` will return a default when there is no value,
+null unless one is given, and `pull()` will return a value, or a default when there is none, and drop it in one step.
 
-| Method | Effect |
-|---|---|
-| `get(string $key, mixed $default = null): mixed` | The value held, or the default. |
-| `put(string $key, mixed $value): void` | Holds the value. |
-| `forget(string $key): void` | Drops the value. |
-| `flash(string $key, mixed $value): void` | Holds the value for the next request only. |
-| `pull(string $key, mixed $default = null): mixed` | Returns the value and drops it. |
-| `regenerate(): void` | Issues a new identifier, superseding the old record. |
-| `invalidate(): void` | Removes the record and clears the cookie. |
-
-A flash value written during one request will be readable in the next, and gone after it.
+A session will also manage its own identifier. `regenerate()` will issue a new one and supersede the old record, as
+described under Identifiers, and `invalidate()` will end the session by removing its record and clearing the cookie.
 
 ### The cookie
 
@@ -117,14 +107,14 @@ The cookie will carry the identifier and nothing else. It will be unavailable to
 connection, scoped to the whole panel, and given no domain, so it is not shared with subdomains. Its name will be
 configurable.
 
-It will be sent on same-site requests and on inbound navigation from elsewhere, but not on cross-site form submissions.
-We will not use the stricter setting, which withholds it on any inbound navigation, because following a link from an
-email would then arrive signed out.
+It will be sent on same-site requests and on navigation arriving from elsewhere, but not on cross-site form
+submissions. I will not use the stricter setting, which withholds the cookie on any navigation arriving from another
+site, because following a link from an email would then arrive signed out.
 
 ### Reaching a session from longer-lived code
 
 The middleware that writes the cookie will have the `Process` [lifetime](../GLOSSARY.md#lifetime), as
-[RFC-0010](0010-http-transport.md) describes, so taking a session as a constructor dependency would resolve one on the
+[RFC-0010](0010-http-transport.md) describes. Taking a session as a constructor dependency would resolve one on the
 first request and hold it for the life of the worker.
 
 It will take a [provider](../GLOSSARY.md#provider) instead, as [RFC-0007](0007-binding-lifetimes.md) describes, which
@@ -145,25 +135,25 @@ final class WriteSessionCookie implements Middleware
 }
 ```
 
-The same applies to anything else that outlives a request and needs the session.
+Anything else that outlives a request and needs the session will reach it the same way.
 
 ### Expiry and pruning
 
-A session will carry an absolute expiry and an idle timeout, both configurable. A session past either will be treated as
-absent, so a request carrying its identifier will start a new one.
+A session will carry an absolute expiry and an idle timeout, both configurable. A session past either will be treated
+as absent, so a request carrying its identifier will start a new one.
 
-`SessionConfig` will hold the cookie's name, the expiry and idle timeout, and the regeneration window.
+`SessionConfig` will hold the cookie's name, the absolute expiry, the idle timeout and the regeneration window.
 
-Expired records, and any [superseded record](../GLOSSARY.md#superseded-record), will be removed by a scheduled task
-rather than by work attached to a request, so no visitor pays for the cleanup. There is no scheduler yet, so the query
-will ship with this design and be scheduled when one exists.
+Expired records, and every [superseded record](../GLOSSARY.md#superseded-record), will be removed by a scheduled task
+rather than by work attached to requests, so no visitor pays for the cleanup. There is no scheduler yet, so the pruning
+query will ship with this design and be scheduled once one exists.
 
 ### Out of scope
 
-- **Authentication.** A session will hold whatever signs someone in and give it no meaning of its own.
+- **Authentication.** A session will hold whatever signs someone in, and give it no meaning of its own.
 - **Long-lived re-authentication.** That belongs with authentication.
 - **Encrypting the payload.** It never leaves the server; only the identifier does.
-- **Cross-site request forgery.** The token belongs in the session, but issuing and verifying it is a separate
+- **Cross-site request forgery.** Its token belongs in the session, but issuing and verifying it is a separate
   component built on this one.
 - **Rate limiting.**
 - **The schema itself.** The table's columns and types are written with the schema builder in
@@ -171,25 +161,21 @@ will ship with this design and be scheduled when one exists.
 
 ## Alternatives considered
 
-The decision this design rests on is recorded separately, with the alternatives it rejected:
-
-- storing a client address truncated, in
-  [ADR-0022](../adr/0022-client-addresses-are-stored-truncated-by-default.md)
+This design rests on [ADR-0022](../adr/0022-truncated-client-addresses.md), which stores a
+client address truncated.
 
 **A self-contained cookie.** A signed or encrypted cookie would hold the session's data with no record on the server,
-saving a read per request. We rejected this because it cannot be revoked, so suspending an account leaves its sessions
-working until they expire.
+saving a read on every request. I rejected this because it cannot be revoked, so suspending an account would leave its
+sessions working until they expire.
 
-**Locking a session for the duration of a request.** This is what PHP's own session handling does. We rejected this
+**Locking a session for the duration of a request.** This is what PHP's own session handling does. I rejected this
 because it serialises the concurrent fragment requests a hypermedia page depends on.
 
-**Deleting the old record when regenerating.** We rejected this because a request already in flight would then fail,
+**Deleting the old record when regenerating.** I rejected this because a request already in flight would then fail,
 which is why the old record is kept briefly and marked superseded instead.
 
-**Identifying sessions with the entity identifier.** We rejected this because a ULID embeds a timestamp and a counter,
-so one is guessable from another, and this identifier is a bearer credential.
-
-No other alternatives were weighed.
+**Identifying sessions with the entity identifier.** I rejected this because a ULID embeds a timestamp and a counter,
+so one is guessable from another, and a session identifier is a bearer credential.
 
 ## Backwards compatibility
 
@@ -197,14 +183,16 @@ Nothing will break. The panel has no sessions today.
 
 ## Open questions
 
-- **What tells a session that a request is a document rather than a fragment.** Only a document request should
-  consume flash, and this component cannot tell the difference: it is carried in a request header and belongs to the
-  hypermedia layer.
+### What tells a session that a request is a document rather than a fragment
+
+Only a document request should consume flash, and this component cannot tell the difference: it is carried in a
+request header and belongs to the hypermedia layer.
 
 ## Changelog
 
 - 2026-10-05: Reworded in the readable house style, and the project's own vocabulary linked to the glossary. The
   design is unchanged.
+- 2026-11-18: Rewrote the document in full, with no change to the design.
 
 ## Sources
 

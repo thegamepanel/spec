@@ -1,30 +1,30 @@
 ---
 id: ADR-0011
-title: Identifiers are ULIDs generated in PHP
+title: Generate ULID identifiers in PHP
 status: accepted
 created: 2026-05-14
 decided: 2026-05-14
-backfilled: 2026-09-14
+backfilled: 2026-11-18
 depends: []
 updates: []
 obsoletes: []
 ---
 
-# ADR-0011: Identifiers are ULIDs generated in PHP
+# ADR-0011: Generate ULID identifiers in PHP
 
 ## Context
 
 Entities need an identity model, and every entity type needs an identifier of its own.
 
-Some rows need their identifier to exist before they are inserted, as outbox rows and queued jobs do.
+Some rows need their identifier before they are inserted, as outbox rows and queued jobs do.
 
-The panel depends on `symfony/uid`, added for generating identifiers.
+The panel already depends on `symfony/uid`, which was added for generating identifiers.
 
 ## Decision
 
-Entity identifiers are ULIDs, generated in PHP through `symfony/uid` before the row is inserted. Each entity type has
-its own identifier class, extending an abstract readonly `EntityId`. A ULID is validated when an identifier is
-constructed, and `EntityId::make()` generates a new identifier.
+I will identify entities by ULIDs, generated in PHP through `symfony/uid` before the row is inserted, with each entity
+type given its own entity identifier class extending an abstract readonly
+`EntityId`, which validates the ULID when it is constructed and generates a new one through `EntityId::make()`.
 
 ## Alternatives
 
@@ -39,7 +39,7 @@ Easier:
 
 Harder:
 
-- A ULID will not be usable as a secret. It embeds a timestamp and a monotonic counter, so one is guessable from a
+- A ULID will not be usable as a secret. It embeds a timestamp and a monotonic counter, so one can be guessed from a
   known one, and identifiers that act as bearer credentials, such as session identifiers, will need a different
   generator.
 

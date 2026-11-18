@@ -72,7 +72,7 @@ Interpolation reads through `Env`, so `Env` is initialised before the loader run
 
 A [configuration object](../GLOSSARY.md#configuration-object) implements `ConfigObject`, which requires `fromArray(array
 $data): static`. Each configuration is an instance of a class unique to it, per
-[ADR-0005](../adr/0005-configuration-is-held-in-typed-objects.md), and its values are typed readonly properties.
+[ADR-0005](../adr/0005-typed-configuration.md), and its values are typed readonly properties.
 
 `ModulesEnabled` is the only [core configuration](../GLOSSARY.md#core-configuration) object.
 
@@ -80,7 +80,7 @@ $data): static`. Each configuration is an instance of a class unique to it, per
 
 `ConfigRegistry` is the configuration [registry](../GLOSSARY.md#registry), sealed into the `ConfigCatalogue`
 [catalogue](../GLOSSARY.md#catalogue), per
-[ADR-0003](../adr/0003-mutable-registries-are-sealed-into-immutable-catalogues.md). It is constructed with the
+[ADR-0003](../adr/0003-sealed-catalogues.md). It is constructed with the
 [configuration tree](../GLOSSARY.md#configuration-tree) and the core mapping.
 
 | Method | Effect |
@@ -130,7 +130,7 @@ Nothing binds configuration objects into the container.
 ## Environment variables
 
 `Env` is a static singleton holding environment variables, per
-[ADR-0006](../adr/0006-environment-variables-are-only-read-during-bootstrap.md). `destroy()` removes the instance.
+[ADR-0006](../adr/0006-environment-at-bootstrap.md). `destroy()` removes the instance.
 Nothing else confines it: once initialised, it is readable from anywhere until it is destroyed.
 
 | Method | Effect |

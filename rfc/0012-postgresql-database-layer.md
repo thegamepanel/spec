@@ -13,19 +13,18 @@ obsoletes: []
 
 ## Abstract
 
-We will move the database component to PostgreSQL and behind a [compiler](../GLOSSARY.md#compiler). Each query and
-schema object will become a [node](../GLOSSARY.md#node) describing what is wanted, and the compiler registered for a
-node's class will turn it into SQL and its bound values together. Connections will use the PostgreSQL driver,
-transactions will nest through savepoints, the type model and DDL will become PostgreSQL's, and the
-[engine](../GLOSSARY.md#engine) will gain the PostgreSQL features later subsystems are built on, each as a
-[primitive](../GLOSSARY.md#primitive).
+I will move the database component onto PostgreSQL and put a [compiler](../GLOSSARY.md#compiler) between its objects and
+the SQL they become. Each query and schema object will be a [node](../GLOSSARY.md#node) describing what is wanted, and
+the compiler registered for its class will turn it into SQL and bound values together. Connections, transactions, the
+type model and schema statements will become PostgreSQL's, and the [engine](../GLOSSARY.md#engine) will gain the
+PostgreSQL features its later subsystems are built on, each as a [primitive](../GLOSSARY.md#primitive).
 
 ## Motivation
 
-The database component assumes MySQL, and its query and schema objects produce their own SQL, as
+The database component assumes MySQL, and every query and schema object produces its own SQL, as
 [RFC-0003](0003-database-component.md) describes.
-[ADR-0016](../adr/0016-postgresql-16-is-the-only-supported-database.md) makes PostgreSQL the only supported database,
-and [ADR-0017](../adr/0017-sql-is-produced-by-a-compiler-not-by-the-query-objects.md) has SQL produced by a
+[ADR-0016](../adr/0016-postgresql-16.md) makes PostgreSQL the only supported database,
+and [ADR-0017](../adr/0017-sql-compiler.md) moves SQL production into a
 [compiler](../GLOSSARY.md#compiler).
 
 Both changes reach the same classes, so they will arrive together: the dialect changes what SQL is produced, and the
@@ -33,11 +32,12 @@ compiler changes what produces it.
 
 ## Proposal
 
-### The compiler seam
+### SQL behind a compiler
 
-Every object the compiler understands will implement `Node`, and `Query`, `Schema`, `Column` and `Index` will extend it.
-An expression will be narrowed to a fragment producing a value, such as raw SQL. A `NodeCompiler` will compile one type
-of [node](../GLOSSARY.md#node), given the [compiler](../GLOSSARY.md#compiler) for the nodes it contains.
+Anything the [compiler](../GLOSSARY.md#compiler) understands will be a [node](../GLOSSARY.md#node). Queries, schema
+statements, columns and indexes will all be nodes. An expression will narrow to what the word means, a fragment that
+produces a value, such as raw SQL. A node compiler will turn one type of node into SQL, and is handed the compiler so
+that it can compile the nodes it contains:
 
 ```php
 interface Node {}
@@ -49,12 +49,14 @@ interface NodeCompiler
 }
 ```
 
-`Compiler::compile(Node $node): CompiledSql` will own no syntax of its own. It will resolve the compiler registered for
-the node's class from the [catalogue](../GLOSSARY.md#catalogue) and pass itself, so a compiler recurses for the nodes it
-contains: a table's compiler will never need to know how a column renders.
+`Compiler::compile(Node $node): CompiledSql` will own no syntax of its own. It will look up the node compiler registered
+for the node's class in a [catalogue](../GLOSSARY.md#catalogue), and pass itself along, so compiling recurses: the
+compiler for a table will never need to know how a column renders. Compilers will be collected in a
+[registry](../GLOSSARY.md#registry) and sealed into that catalogue, as
+[ADR-0003](../adr/0003-sealed-catalogues.md) decides.
 
-`CompilerRegistry` will be the [registry](../GLOSSARY.md#registry) that collects compilers, sealed into
-`CompilerCatalogue`, following [ADR-0003](../adr/0003-mutable-registries-are-sealed-into-immutable-catalogues.md).
+What a compiler returns will be [compiled SQL](../GLOSSARY.md#compiled-sql): a string of SQL together with the values
+bound to it.
 
 ```php
 final readonly class CompiledSql
@@ -67,109 +69,109 @@ final readonly class CompiledSql
 }
 ```
 
-A fragment of [compiled SQL](../GLOSSARY.md#compiled-sql) will carry its own bound values, and composing fragments will
-concatenate the SQL and the values in the same order, so a placeholder and its value cannot be produced separately.
+A fragment will carry its own bound values, and composing fragments will concatenate their SQL and their values in the
+same order. There will be no way to produce a placeholder and its value separately.
 
-Every name written into SQL will go through `Identifier`, a value object that quotes and escapes it, whether it is
-qualified or a wildcard:
+The compiler will be the only place a complete statement exists before it becomes a string, so it will carry a hook
+where a statement can be refused.
 
-- It will be rendered in double quotes, with any embedded quote doubled.
-- It will be quoted unconditionally, so names are case sensitive exactly as written. The
-  [engine](../GLOSSARY.md#engine)'s own names are lower snake case, so the folding difference never arises in practice,
-  though a table declared otherwise needs quoting by hand thereafter.
-- Qualified names and wildcards will be handled, which is what allows a schema to qualify a name later without the
-  compilers changing.
-- A name containing a null byte will be rejected, and so will one over 63 bytes, because PostgreSQL truncates silently
-  at that length and two long generated index names could otherwise collide.
+### Names and literals
+
+Every name written into SQL will go through `Identifier`, a value object that quotes and escapes it:
+
+- A name will be rendered in double quotes, with any double quote inside it doubled.
+- Names will be quoted unconditionally, so they are case sensitive exactly as written. The
+  [engine](../GLOSSARY.md#engine)'s own names are lower snake case, so the difference in case folding never arises for
+  them, but a table declared with any other case has to be quoted by hand from then on.
+- Qualified names and wildcards will be handled, which is what will let a name be qualified with a schema later without
+  any compiler changing.
+- A name containing a null byte will be rejected, and so will a name longer than 63 bytes. PostgreSQL truncates longer
+  names silently, so two long generated index names could otherwise collapse into one.
 
 A matching quoter will handle comments and any other literal that cannot be a bound value.
 
-The compiler will be the only point at which a complete statement exists before it becomes a string, so it will carry a
-hook for refusing one.
+### Connections
 
-### Connections and transactions
+`ConnectionFactory` will produce connections on the PostgreSQL driver, which gives the [engine](../GLOSSARY.md#engine)
+notifications, bulk copying and large objects without a second extension. A [connection](../GLOSSARY.md#connection) will
+hold its options, run its transactions and provide each [primitive](../GLOSSARY.md#primitive).
 
-`ConnectionFactory` will produce connections that use the PostgreSQL driver, which gives the
-[engine](../GLOSSARY.md#engine) access to notifications, bulk copying and large objects without a second extension. A
-[connection](../GLOSSARY.md#connection) will hold its options, run its transactions and provide each
-[primitive](../GLOSSARY.md#primitive).
-
-- **Connection string.** It will gain the SSL mode, a connection timeout and an application name. The application name
-  will make it possible to tell which part of the panel holds a lock.
-- **Sockets.** A socket setting will mean the directory PostgreSQL's socket lives in, rather than a path to a socket
-  file.
-- **Options.** These will be split into overridable defaults and a forced set, so nothing reachable from configuration
-  can disable the error mode the connection depends on. Emulated prepares will be dropped, since the driver always
+- **The connection string** will gain the SSL mode, a connection timeout and an application name. The application name
+  is what will make it possible to tell which part of the panel holds a lock.
+- **A socket setting** will name the directory PostgreSQL's socket lives in, rather than the socket file.
+- **Options** will be split into overridable defaults and a forced set, so that nothing reachable from configuration can
+  turn off the error mode the connection depends on. Emulated prepares will be dropped, since the driver always
   prepares natively.
-- **Timeouts.** Statement, lock and idle-in-transaction timeouts will become connection configuration, applied when the
-  connection is made.
-- **Persistent connections.** These will be applied, with the session reset on connect so a reused connection inherits
-  no prepared statements, temporary tables, search path or session locks. They are incompatible with a
-  transaction-mode pooler.
-- **Passwords.** These may be empty, which is what socket peer authentication uses.
+- **Statement, lock and idle-in-transaction timeouts** will be connection configuration, applied when the connection is
+  made.
+- **Persistent connections** will be applied, and the session reset on connect, so that a reused connection inherits no
+  prepared statements, temporary tables, search path or session locks. They are incompatible with a pooler running in
+  transaction mode.
+- **A password** may be empty, since socket peer authentication uses none.
 
-Transactions will become savepoint-aware, which is the sharpest change in behaviour in this design. PostgreSQL aborts
-an entire transaction when any statement fails, and every later statement fails until it is rolled back. A nested
-transaction will therefore issue a savepoint, a failure inside it will roll back to that savepoint, and only the
-outermost call will commit. Without that, code catching a query failure and carrying on inside the same unit of work
-is silently broken.
+The last inserted identifier will be removed from the write result rather than fixed. Returning rows from the statement
+itself will replace it.
 
-`lastInsertId` will be removed from the write result rather than fixed, and `RETURNING` will replace it.
+The driver returns native integers, floats and booleans where MySQL's returned strings, so the typed accessors on a
+[row](../GLOSSARY.md#row) from [RFC-0003](0003-database-component.md) will carry weight they have not carried before.
+What the driver returns for each type will be pinned by tests rather than assumed.
 
-The driver returns native integers, floats and booleans where MySQL returned strings, so the typed accessors on a
-[row](../GLOSSARY.md#row) from [RFC-0003](0003-database-component.md) will carry weight they did not before. Their
-representations will be pinned by tests rather than assumed.
+### Transactions nest through savepoints
+
+This is the sharpest change in behaviour in the design. When any statement fails, PostgreSQL aborts the whole
+transaction, and every statement after it fails until the transaction is rolled back. A nested transaction will
+therefore issue a savepoint, a failure inside it will roll back to that savepoint, and only the outermost transaction
+will commit. Without this, code that catches a failed query and carries on within the same unit of work would be
+silently broken.
 
 ### Queries
 
-Each query object will keep its builder methods and lose its rendering. `Select`, `Insert`,
-`Update`, `Delete` and the raw expression will each become a [node](../GLOSSARY.md#node), the clause objects will gain
-their own compilers, and the traits that compose shared clauses will keep only their fluent methods.
+Each query object will keep its builder methods and lose its rendering. Selects, inserts, updates, deletes and raw
+expressions will become [node](../GLOSSARY.md#node)s, the clauses they share will gain compilers of their own, and the
+traits that compose those clauses will keep only their fluent methods.
 
-`Connection::query()`, `execute()` and `stream()` will accept a node or a string and compile it through the
-[compiler](../GLOSSARY.md#compiler) they are given, so being executable will mean a compiler is registered for the node,
-rather than the object having a method that returns SQL.
+`Connection::query()`, `execute()` and `stream()` will accept a node or a string, and compile a node through the
+[compiler](../GLOSSARY.md#compiler) the connection is given. Being executable will then mean that a compiler is
+registered for the node, rather than that the object has a method returning SQL.
 
-Moving the nodes behind the compiler will change no SQL except that names are quoted. Every dialect change is separate
-from that move.
+Moving the query nodes behind the compiler will change no SQL except that names are quoted. Every change of dialect will
+be made separately from that move.
 
 #### Writes
 
-- **Insert ignoring conflicts.** `ON CONFLICT DO NOTHING` will replace `INSERT IGNORE`.
-- **Replace.** This will be removed with no replacement. Deleting the conflicting row and inserting a new one fires
-  delete triggers and loses every column not mentioned; an upsert is what is wanted instead.
-- **Upsert.** It will be `ON CONFLICT` with an explicit target, either a column list or a named constraint, followed by
-  either nothing or an update with an optional condition. The excluded row will be available, since referring to the
-  value that failed to insert is the point of the construct.
-- **Returning.** This will be available on insert, update and delete. Asking for it will change the type of the
-  [node](../GLOSSARY.md#node) so the statement is run as a query and yields rows, which keeps the write result a simple
-  value. It will be the answer to the removed `lastInsertId`, and it will work for multi-row inserts, which
-  `lastInsertId` never did.
-- **Multi-table writes.** An update may take a `FROM`, and a delete a `USING`, so neither needs a correlated subquery.
-- **Ordering and limiting writes.** These will be removed from update and delete, which PostgreSQL does not support.
-  The replacement will be a subquery selecting the keys to act on.
-- **Unguarded writes.** An update or delete compiled with no condition will be refused unless the caller has said that
-  is what they meant. This is possible only because the compiler will see the whole statement first.
+- **Inserting while ignoring conflicts** will be `ON CONFLICT DO NOTHING`, in place of `INSERT IGNORE`.
+- **Replacing** will be removed with nothing in its place. It deletes the conflicting row and inserts a new one, which
+  fires delete triggers and loses every column not mentioned. An upsert is what is wanted instead.
+- **An upsert** will be `ON CONFLICT` with an explicit target, either a list of columns or a named constraint, followed
+  by doing nothing or by an update with an optional condition. The excluded row will be available to the update, since
+  referring to the value that failed to insert is the point of the construct.
+- **Returning rows** will be available on inserts, updates and deletes. Asking for them will change the type of the
+  [node](../GLOSSARY.md#node), so that the statement runs as a query and yields rows, and the write result stays a
+  simple value. This will be the answer to the removed last inserted identifier, and unlike it, it will work for an
+  insert of several rows.
+- **Writes across tables** will be possible without a correlated subquery: an update may take a `FROM`, and a delete a
+  `USING`.
+- **Ordering and limiting** will be removed from updates and deletes, since PostgreSQL supports neither on a write. A
+  subquery selecting the keys to act on will take their place.
+- **An unguarded write**, meaning an update or delete compiled with no condition, will be refused unless the caller has
+  said that is what they meant. This is possible only because the compiler sees the whole statement first.
 
 #### Reads
 
-- **Locking.** `FOR UPDATE`, `FOR NO KEY UPDATE`, `FOR SHARE` and `FOR KEY SHARE` will be available, each able to skip
-  locked rows, refuse to wait, or name the tables it applies to. Skipping locked rows is what a job queue claims work
-  with.
-- **Select constructs.** A select will gain distinct on named expressions, common table expressions including recursive
-  and data-modifying ones, lateral joins, and window functions with partitions and frames.
-- **Pattern matching.** Case-insensitive matching and the regular expression operators will be available.
-- **JSON.** Access and containment operators over `jsonb` will be available. Existence will be expressed through the
-  function forms, because the operators collide with the placeholder marker and a query containing them either fails
-  to parse or has the operator taken as a parameter.
-- **Arrays.** Containment and overlap will be available, along with comparison against any or all elements.
-- **Full-text search.** A text search vector will be matched against a query parsed from what people actually type,
-  with ranking available for ordering. It will replace the MySQL full-text expression, which will be removed.
-- **Offset.** An offset without a limit will be valid, which it was not under MySQL.
+- **Locking** will offer `FOR UPDATE`, `FOR NO KEY UPDATE`, `FOR SHARE` and `FOR KEY SHARE`, each able to skip locked
+  rows, refuse to wait, or name the tables it applies to. Skipping locked rows is how a job queue will claim work.
+- **A select** will gain distinct on named expressions, common table expressions, including recursive and
+  data-modifying ones, lateral joins, and window functions with partitions and frames.
+- **Pattern matching** will gain case-insensitive matching and the regular expression operators.
+- **JSON** will gain the access and containment operators over `jsonb`. Existence will be tested through the function
+  forms rather than the operators, because the operators collide with the placeholder marker: a query containing one
+  either fails to parse or has the operator taken as a parameter.
+- **Arrays** will gain containment and overlap, and comparison against any or all of their elements.
+- **Full-text search** will match a text search vector against a query parsed from what people actually type, with
+  ranking available for ordering. It will replace MySQL's full-text expression, which will be removed.
+- **An offset** without a limit will be valid, which it was not under MySQL.
 
-### Schema
-
-#### The type model
+### Types
 
 | Today | Becomes |
 |---|---|
@@ -184,137 +186,131 @@ from that move.
 | JSON | `jsonb` |
 | New | `uuid`, `interval`, the network address types, and a text search vector |
 
-Timestamps will always be time zone aware. A panel scheduling restarts across time zones with a naive timestamp is a
+Timestamps will always carry a time zone. A naive timestamp in a panel that schedules restarts across time zones is a
 bug waiting for the clocks to change.
 
-The per-family column classes will remain, since they are what makes the shared templates work, but their membership
-will change and new families will arrive. An array will be a modifier on any column rather than a family of its own,
-because almost any type can be an array.
+Column classes will stay grouped by family, since that is what makes the shared templates work, but which types belong
+to each family will change and new families will arrive. An array will be a modifier on any column rather than a family
+of its own, because almost any type can be an array.
 
-Modifiers will gain a collation, a check constraint, an identity column, a stored generated column, and default
-expressions alongside default literals. They will lose column placement, unsigned, per-column character sets, and
-virtual generated columns, which need a version above the minimum the panel supports.
+Columns will gain a collation, a check constraint, identity, stored generated values, and default expressions beside
+default literals. They will lose column placement, unsigned, a character set per column, and virtual generated values,
+which need a version above the panel's minimum.
 
-An enumeration will be text with a check constraint by default, because changing the permitted values is then a
-constraint swap inside a transaction. Opting into a native type will give something compact and introspectable, at the
-cost of a schema object with a lifecycle of its own.
+An enumeration will be text with a check constraint by default, because changing the permitted values is then a swap of
+one constraint for another inside a transaction. Opting into a native type will give something compact that can be
+introspected, at the cost of a schema object with a lifecycle of its own.
 
-#### DDL takes no bound values
+### Schema statements
 
-PostgreSQL accepts no placeholders in schema statements, so a default, a check expression and an enumeration's values
-are all literal text. Every literal will go through the quoter, and a schema [node](../GLOSSARY.md#node) will compile to
-a statement with no bound values by construction.
+#### Literals, never bound values
+
+PostgreSQL accepts no placeholders in a schema statement, so a default, a check expression and an enumeration's values
+all have to be literal text. Every literal will go through the quoter, and a schema [node](../GLOSSARY.md#node) will
+compile to a statement with no bound values by construction.
 
 #### One node, several statements
 
-A table's definition will no longer compile to one string. Only primary keys and uniqueness can be expressed inline,
-so every other index is a separate statement, and a comment on a table or a column is a statement of its own.
+A table's definition will no longer compile to one string. Only primary keys and uniqueness can be declared inline, so
+every other index is a statement of its own, and so is a comment on a table or a column.
 
 Compiling a schema [node](../GLOSSARY.md#node) will therefore produce a [statement list](../GLOSSARY.md#statement-list),
-executed in order inside one transaction. PostgreSQL runs schema changes inside transactions, so a migration failing at
-the seventh statement rolls back the first six. The exceptions are creating an index concurrently and creating a
-database, neither of which can run inside a transaction, so a node will advertise that rather than failing when it is
+executed in order inside one transaction. PostgreSQL runs schema changes inside transactions, so a migration that fails
+at its seventh statement rolls back the first six. The exceptions are creating an index concurrently and creating a
+database, neither of which can run inside a transaction, so a node will say so in advance rather than failing when it is
 executed.
 
-#### Tables, indexes and objects
+#### Tables, indexes and other objects
 
-- **Tables.** The storage engine and the table-level character set and collation will be removed, since encoding belongs
-  to the database. Unlogged tables, for genuinely disposable data, and creation only when absent will be added.
-- **Altering.** An alter will take several actions in one statement, and a type change will carry an explicit
+- **Tables** will lose the storage engine and the table-level character set and collation, since encoding belongs to the
+  database. They will gain unlogged tables, for data that is genuinely disposable, and creation only when the table is
+  absent.
+- **Altering a table** will take several actions in one statement, and a change of type will carry an explicit
   conversion where the cast is not implicit.
-- **Dropping and truncating.** Both will gain cascading and restricting, and truncation will be able to restart
-  identity columns.
-- **Indexes.** A method may be chosen, and an index may be on an expression, partial, covering, unique with nulls not
-  distinct, or use an operator class.
-- **Constraints.** Primary keys, uniqueness, foreign keys with their actions and deferability, checks, and exclusion
-  constraints will be available. Exclusion constraints have no MySQL equivalent and let the database guarantee that no
-  two rows overlap.
-- **Objects.** Schemas, enumerated types and extensions will be able to be created and dropped, which the native
-  enumeration path needs and which makes qualifying a schema per [module](../GLOSSARY.md#module) possible later.
+- **Dropping and truncating** will both gain cascading and restricting, and truncating will be able to restart identity
+  columns.
+- **An index** may choose its method, and may be on an expression, partial, covering, unique with nulls not distinct, or
+  use an operator class.
+- **Constraints** will cover primary keys, uniqueness, foreign keys with their actions and deferability, checks, and
+  exclusion constraints. An exclusion constraint has no MySQL equivalent, and lets the database guarantee that no two
+  rows overlap.
+- **Schemas, enumerated types and extensions** will be able to be created and dropped. The native enumeration path needs
+  this, and it is what will later make it possible to qualify names with a schema for each
+  [module](../GLOSSARY.md#module).
 
-### Streaming
+### Streaming through a cursor
 
-`stream()` will become a real server-side cursor: the query will be declared as a cursor, rows will be fetched forward
-in batches, and the cursor will be closed. Memory will then stay flat whatever the size of the result, where before the
-driver retrieved everything before the first row was handed back.
+`stream()` will use a real server-side cursor: the query will be declared as a cursor, its rows fetched forward in
+batches, and the cursor closed. Memory will stay flat whatever the size of the result, where today the driver retrieves
+every row before the first is handed back.
 
-A cursor lives inside a transaction, so streaming will either join the caller's transaction or open one for as long as
-the cursor is open. This will have two consequences: a long stream will hold a transaction open, which holds back
-vacuuming, and a slow consumer can be killed by the idle-in-transaction timeout that protects the panel from wedged
-connections.
+A cursor lives inside a transaction, so streaming will join the caller's transaction or open one for as long as the
+cursor is open. That has two consequences. A long stream holds a transaction open, which holds back vacuuming. And a
+slow consumer can be killed by the idle-in-transaction timeout that protects the panel from wedged connections.
 
-The cursor will be closed and the transaction resolved however iteration ends, including a consumer breaking out early
-or a callback throwing, because a leaked cursor holds its transaction and a leaked transaction eventually holds
-everything.
+However iteration ends, including a consumer breaking out early or a callback throwing, the cursor will be closed and
+the transaction resolved. A leaked cursor holds its transaction, and a leaked transaction eventually holds everything.
 
 ### Primitives
 
-Each [primitive](../GLOSSARY.md#primitive) will exist because a designed subsystem needs it. Each will be a thin
-wrapper, with no policy.
+Each [primitive](../GLOSSARY.md#primitive) will exist because a subsystem already designed needs it, and each will be a
+thin wrapper with no policy of its own.
 
-- **Notifications.** Sending will be emitted as a function call, so the channel and payload are bound values rather than
-  interpolated text. Delivery is transactional, so a notification sent inside a transaction fires only on commit. A
-  listener will take its own dedicated [connection](../GLOSSARY.md#connection) and block with a timeout rather than
+- **Notifications** will be sent through a function call, so the channel and the payload are bound values rather than
+  interpolated text. Delivery is transactional, so a notification sent inside a transaction fires only when it commits.
+  A listener will hold a [connection](../GLOSSARY.md#connection) of its own and block with a timeout rather than
   polling.
-- **Advisory locks.** A lock will be taken for the duration of a transaction, so it cannot outlive its unit of work or
-  leak when a process dies. A lock taken outside a transaction will open one. Keys will be namespaced per subsystem, so
-  two subsystems cannot collide, though two names within one namespace still can.
-- **Bulk copying.** Rows will be read and written in bulk, in a format that handles quoting and embedded delimiters,
-  which is an order of magnitude faster than many-row inserts. It will be for moving rows, where streaming is for
-  processing them.
-- **Session variables.** Each will be set for the duration of a transaction, through a function so the value is bound,
-  and will carry the request identity that row-level policies read. Being transaction-scoped is what stops it leaking
-  into the next request on a reused connection.
+- **Advisory locks** will last for a transaction, so a lock cannot outlive its unit of work or leak when a process dies.
+  Taking a lock outside a transaction will open one. Keys will be namespaced by subsystem, so two subsystems cannot
+  collide, though two names within one namespace still can.
+- **Bulk copying** will read and write rows in bulk, in a format that handles quoting and embedded delimiters, an order
+  of magnitude faster than inserting many rows. It is for moving rows, where streaming is for processing them.
+- **Session variables** will be set for the length of a transaction, through a function so that the value is bound, and
+  will carry the request identity that row-level policies read. Being scoped to the transaction is what stops one
+  request's value leaking into the next on a reused connection.
 
-### Testing
+### Proving statements against a server
 
 Every construct the [compiler](../GLOSSARY.md#compiler) can produce will have a fixture, and one integration test will
-prepare each fixture's SQL against a real server, so the test will prove the database accepts the statement rather than
-proving the compiler produced what the test author typed. The fixture set will be shared with the unit tests, so a
-construct cannot be added with a string comparison alone.
+prepare each fixture's SQL against a real PostgreSQL server. The test will then prove that the database accepts the
+statement, rather than that the compiler produced what the test's author typed. The fixtures will be shared with the
+unit tests, so a construct cannot be added with a string comparison alone.
 
 ### Out of scope
 
 - **The migration runner.** It inherits the two statements that cannot run inside a transaction.
-- **Splitting database roles and row-level policies.** The session variable makes them possible, but they belong with
-  whoever designs installation.
-- **The subsystems the primitives exist for.** These are delivering events durably, the job queue, the scheduler, and
-  any policy.
-- **Reconnection and backoff for a listener.** This belongs to whatever consumes notifications.
-- **Declarative partitioning.** It has no consumer yet.
+- **The subsystems the primitives exist for**: delivering events durably, the job queue, the scheduler, and any
+  policy.
+- **Reconnection and backoff for a listener**, which belong to whatever consumes notifications.
+- **Declarative partitioning**, which has no consumer yet.
 - **`MERGE`.** It is available at the minimum supported version, but it is the wrong tool for an upsert.
 
 ## Alternatives considered
 
-The decisions this design rests on are recorded separately, with the alternatives each one rejected:
+This design rests on four decisions recorded separately:
+[ADR-0003](../adr/0003-sealed-catalogues.md), which seals mutable registries into
+immutable catalogues; [ADR-0008](../adr/0008-direct-pdo.md), which builds database access
+directly on PDO; [ADR-0016](../adr/0016-postgresql-16.md), which makes PostgreSQL 16 and
+above the only supported database; and
+[ADR-0017](../adr/0017-sql-compiler.md), which produces SQL with a compiler.
 
-- sealing mutable registries into immutable catalogues, in
-  [ADR-0003](../adr/0003-mutable-registries-are-sealed-into-immutable-catalogues.md)
-- database access built directly on PDO, in [ADR-0008](../adr/0008-database-access-is-built-directly-on-pdo.md)
-- PostgreSQL as the only supported database, in
-  [ADR-0016](../adr/0016-postgresql-16-is-the-only-supported-database.md)
-- SQL produced by a compiler, in
-  [ADR-0017](../adr/0017-sql-is-produced-by-a-compiler-not-by-the-query-objects.md)
-
-**Escaping the JSON existence operators rather than using their function forms.** We rejected this because, although
-doubling the marker works on this driver, it puts a driver quirk into generated SQL that anyone reading a log has to
+**Escaping the JSON existence operators** by doubling the placeholder marker, rather than using the function forms. It
+works on this driver. I rejected this because it puts a driver quirk into generated SQL that anyone reading a log has to
 decode.
 
-**Fixing the last inserted identifier rather than removing it.** We rejected this because asking the connection
-afterwards cannot answer for a multi-row insert and reports a stale value after an update or delete, where returning
-rows from the statement that generated them answers both.
+**Fixing the last inserted identifier** rather than removing it. I rejected this because asking the connection after
+the statement cannot answer for an insert of several rows, and reports a stale value after an update or delete, where
+returning rows from the statement that generated them answers both.
 
-**Holding a cursor beyond its transaction.** We rejected this because, although it is possible, it materialises the
-whole result when the transaction commits, which is the cost streaming exists to avoid.
-
-No other alternatives were weighed.
+**Holding a cursor beyond its transaction.** It is possible. I rejected this because it materialises the whole result
+when the transaction commits, which is the cost streaming exists to avoid.
 
 ## Backwards compatibility
 
 - MySQL and MariaDB will no longer be supported, and everything written against their dialect will change: the upsert
   and replace constructs, full-text search, the type model, and ordering or limiting a write.
-- A query or schema object will no longer produce its own SQL, so anything calling those methods
-  will compile the [node](../GLOSSARY.md#node) instead, and a [connection](../GLOSSARY.md#connection) will need a
+- A query or schema object will no longer produce its own SQL, so anything calling those methods will compile the
+  [node](../GLOSSARY.md#node) instead, and a [connection](../GLOSSARY.md#connection) will need a
   [compiler](../GLOSSARY.md#compiler).
 - Names will be quoted, so generated SQL will differ from today's even where the construct is unchanged.
 - The last inserted identifier will be gone from the write result, replaced by returning rows.
@@ -322,19 +318,38 @@ No other alternatives were weighed.
 
 ## Open questions
 
-- **The shape of a compiled result carrying several statements.** The column model and the table work agree it is needed
-  and that the table work delivers it, but neither settles what it looks like.
-- **How a caller opts out of the unguarded-write guard.**
-- **The builder methods for an upsert**, which the record describes by behaviour rather than by name.
-- **Whether writes needing ordering get a helper**, or only a documented subquery pattern.
-- **How a module registers a node and its compiler**, which the compiler seam makes possible but does not describe.
-- **The namespace values for advisory locks**, one per subsystem.
-- **The default batch size for a cursor.**
+### The shape of a compiled result carrying several statements
+
+The column model and the table work agree it is needed and that the table work delivers it, but neither settles what it
+looks like.
+
+### How a caller opts out of the unguarded-write guard
+
+### The builder methods for an upsert
+
+The record describes them by behaviour rather than by name.
+
+### Whether writes needing ordering get a helper
+
+Or only a documented subquery pattern.
+
+### How a module registers a node and its compiler
+
+The compiler seam makes it possible but does not describe it.
+
+### The namespace values for advisory locks
+
+One per subsystem.
+
+### The default batch size for a cursor
 
 ## Changelog
 
 - 2026-10-05: Reworded in the readable house style, and the project's own vocabulary linked to the glossary. The
   design is unchanged.
+- 2026-11-18: Rewrote the document in full, with no change to the design.
+- 2026-11-18: Removed splitting database roles and row-level policies from Out of scope, since neither belongs to
+  this design.
 
 ## Sources
 

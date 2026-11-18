@@ -1,30 +1,31 @@
 ---
 id: ADR-0007
-title: MySQL and MariaDB are the default database
+title: Assume MySQL and MariaDB
 status: accepted
 created: 2026-03-29
 decided: 2026-03-29
-backfilled: 2026-09-14
+backfilled: 2026-11-18
 depends: []
 updates: []
 obsoletes: []
 ---
 
-# ADR-0007: MySQL and MariaDB are the default database
+# ADR-0007: Assume MySQL and MariaDB
 
 ## Context
 
-The engine needs a database component: support for several simultaneous connections, one of them designated the
-primary connection and used by default, an object-first abstraction of SQL queries, and a schema migration tool.
-The component has to assume a database by default.
+The [engine](../GLOSSARY.md#engine) needs a database component. It is to hold several
+[connection](../GLOSSARY.md#connection)s at once with one of them designated the
+[primary connection](../GLOSSARY.md#primary-connection) and used by default, to abstract SQL queries as objects, and to
+provide a schema migration tool. The component has to assume some database by default.
 
 MySQL and MariaDB are the most common choices, and the easiest for people installing the panel to set up.
 
 ## Decision
 
-The panel assumes MySQL, or a compatible MariaDB, by default. Other driver types, such as PostgreSQL and MSSQL, are
-supported inside the database component so that one can be added later without a large refactor, but are not
-exposed.
+I will assume MySQL, or a compatible MariaDB, by default. Other driver types, such as PostgreSQL and MSSQL, will be
+supported inside the database component so that one can be added later without a large refactor, but none of them
+will be exposed.
 
 ## Alternatives
 
@@ -43,13 +44,14 @@ Easier:
 Harder:
 
 - Each supported version will need testing: the query builder against MySQL 8.0 and 8.4 and MariaDB 10.11 and 11.4,
-  and connections against MySQL 8.4.
+  and [connection](../GLOSSARY.md#connection)s against MySQL 8.4.
 - Moving to another database will mean replacing the MySQL syntax the query and schema builders are built on, not
   only adding a driver.
 
 Constrained:
 
-- The connection driver will be hardcoded to MySQL, and no other driver will be reachable through configuration.
+- The connection driver will be hardcoded to MySQL, and no other driver will be reachable
+  through configuration.
 
 ## Sources
 

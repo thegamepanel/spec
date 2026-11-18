@@ -1,23 +1,23 @@
 ---
 id: ADR-0010
-title: Configuration files are TOML
+title: Write configuration in TOML
 status: accepted
 created: 2026-03-30
 decided: 2026-04-22
-backfilled: 2026-09-14
+backfilled: 2026-11-18
 depends: [ADR-0009, RFC-0002]
 updates: []
 obsoletes: []
 ---
 
-# ADR-0010: Configuration files are TOML
+# ADR-0010: Write configuration in TOML
 
 ## Context
 
-The panel is distributed as a single binary running FrankenPHP, per
-[ADR-0009](0009-the-panel-runs-as-a-frankenphp-worker-in-a-single-binary.md). Its configuration is held in typed
-configuration objects, per [RFC-0002](../rfc/0002-configuration-objects.md), but nothing decides the format that
-configuration is written in.
+The panel is distributed as a single binary running FrankenPHP, as
+[ADR-0009](0009-frankenphp-worker.md) decides. Its configuration is held in typed
+[configuration object](../GLOSSARY.md#configuration-object)s, as [RFC-0002](../rfc/0002-configuration-objects.md)
+describes, but nothing decides the format that configuration is written in.
 
 A standalone PHP web application would typically write its configuration as PHP files. A panel distributed as a
 binary is not bound to that, and can read its configuration from whichever format suits the job.
@@ -27,16 +27,16 @@ knowing PHP.
 
 ## Decision
 
-Configuration is written in TOML files, which sysadmins edit directly. The panel does not read configuration from
-PHP files.
+I will write configuration in TOML files, which sysadmins edit directly, and the panel will not read configuration
+from PHP files.
 
 ## Alternatives
 
-**PHP files.** They are what a standalone PHP web application would use, which a panel distributed as a binary does
-not need, and editing them requires knowing PHP.
+**PHP files**, which is what a standalone PHP web application would use. I rejected this because a panel distributed
+as a binary does not need them, and editing them requires knowing PHP.
 
-**JSON** and **YAML**. Like TOML, both are widely known. TOML is chosen over them because it is the simplest of the
-three, and the closest to what people are already used to.
+**JSON** and **YAML**, which are widely known, as TOML is. I rejected them because TOML is the simplest of the three,
+and the closest to what people are already used to.
 
 ## Consequences
 
@@ -46,9 +46,10 @@ Easier:
 
 Harder:
 
-- The configuration component will need a TOML parser, and configuration objects will be built from the arrays it
-  produces rather than written as PHP.
-- Modules will need a way to define how their configuration objects are loaded from those files.
+- The configuration component will need a TOML parser, and [configuration object](../GLOSSARY.md#configuration-object)s
+  will be built from the arrays it produces rather than written as PHP.
+- [Module](../GLOSSARY.md#module)s will need a way to define how their configuration objects are loaded from those
+  files.
 - Secrets will need to be kept out of the files, which are plain text, and supplied from the environment instead.
 
 Constrained:

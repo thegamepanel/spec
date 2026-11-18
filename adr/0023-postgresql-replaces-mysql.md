@@ -4,7 +4,7 @@ title: Replace MySQL and MariaDB with PostgreSQL
 status: accepted
 created: 2026-08-07
 decided: 2026-08-07
-backfilled: 2026-10-06
+backfilled: 2026-11-18
 depends: [ADR-0009]
 updates: []
 obsoletes: [ADR-0007]
@@ -14,18 +14,18 @@ obsoletes: [ADR-0007]
 
 ## Context
 
-The panel assumes MySQL, or a compatible MariaDB, as [ADR-0007](0007-mysql-and-mariadb-are-the-default-database.md)
+The panel assumes MySQL, or a compatible MariaDB, as [ADR-0007](0007-mysql-and-mariadb.md)
 records. MySQL is the most common database and the easiest for people installing the panel to set up, and people moving
 from Pterodactyl already have a MySQL database. The panel writes SQL for the database it targets rather than a subset
-portable across several: it is an application with a known infrastructure target, not a framework, and has no need to
-abstract over databases.
+portable across several, because it is an application with a known infrastructure target, not a framework, and has no
+need to abstract over databases.
 
 The database component exists, with connections, a query builder and a schema builder written against MySQL. Nothing
 consumes it yet: no table has been defined, and no feature stores anything. Changing database now means rewriting that
 component alone. Changing later would also mean rewriting everything built on it.
 
 [Modules](../GLOSSARY.md#module) are a headline feature of the panel, and an
-[external module](../GLOSSARY.md#external-module)'s migrations are third-party code. MySQL and MariaDB commit each
+external module's migrations are third-party code. MySQL and MariaDB commit each
 schema change implicitly, so a migration that fails part way leaves the schema partly applied, with no clean way back.
 
 Without a namespace of their own, modules' tables would share one, so two modules could choose the same table name, and
@@ -39,28 +39,28 @@ every server through the client API ([GHSA-6888-7f3w-92jx]). Neither MySQL nor M
 
 ## Decision
 
-We will use PostgreSQL as the panel's only database, and remove support for MySQL and MariaDB entirely rather than keep
-it alongside. We are choosing it for what MySQL and MariaDB lack: schema changes that run inside transactions, so that a
+I will make PostgreSQL the panel's only database and remove support for MySQL and MariaDB entirely, rather than keep it
+alongside. I choose it for two things MySQL and MariaDB lack. Its schema changes run inside transactions, so a
 [module](../GLOSSARY.md#module)'s migration that fails can be rolled back rather than leave the schema partly applied,
-and so that a module's schema can be created and dropped with everything in it; and row-level security, which the panel
-could use as a floor beneath its own authorisation against defects of the sort Pterodactyl has had. Its schemas also
-give each module a namespace of its own, free of conflicting names and removable as a whole. One database also means one
-test matrix and SQL written for it, and PostgreSQL's features are there for designs to build on. The move is cheap now,
-because nothing yet consumes the database component. The minimum PostgreSQL version, and how connections are held under
-the worker process, are left open.
+and a module's schema can be created and dropped with everything in it. Its row-level security gives the panel a
+possible floor beneath its own authorisation, against defects of the sort Pterodactyl has had. Its schemas also give
+each module a namespace of its own, free of conflicting names and removable as a whole; one database means one test
+matrix and SQL written for it; and its features are there for designs to build on. The move is cheap now, because
+nothing yet consumes the database component. The minimum PostgreSQL version, and how connections are held under the
+worker process, are left open.
 
 ## Alternatives
 
 **Keeping MySQL and MariaDB.** They are familiar to the game hosting community, match existing Pterodactyl
-installations, and are more widely offered on budget VPS and shared hosting. We rejected this because neither provides
+installations, and are more widely offered on budget VPS and shared hosting. I rejected this because neither provides
 transactional schema changes or row-level security, and their advantages are familiarity and availability rather than
 anything the panel needs from a database. Moving from Pterodactyl is a one-time export of data either way, because the
 panel does not share Pterodactyl's schema.
 
 **Supporting both.** The panel would abstract over MySQL, MariaDB and PostgreSQL, and leave the choice to whoever
-installs it. We rejected this because it doubles the test matrix and limits the SQL to what the databases share, for an
+installs it. I rejected this because it doubles the test matrix and limits the SQL to what the databases share, for an
 audience that would mostly not use the choice, which makes it the worst of the options. Ghost supports only MySQL 8 in
-production for a similar reason, keeping a narrow set of supported environments so that maintenance stays manageable
+production for a similar reason, keeping its supported environments narrow so that maintenance stays manageable
 ([Ghost's supported databases]).
 
 ## Consequences
@@ -70,21 +70,20 @@ Easier:
 - Schema changes can run inside transactions, so a [module](../GLOSSARY.md#module)'s migration that fails can be
   rolled back rather than leave the schema partly applied. The benefit will grow with the number of modules.
 - Each module could be given a schema of its own, so that its tables and data never conflict with another module's
-  names, and the module can be removed by dropping its schema inside a transaction. Whether and how modules use
+  names, and the module could be removed by dropping its schema inside a transaction. Whether and how modules use
   schemas is not decided here.
 - Row-level security will be available to the panel as a possible floor beneath its own checks, enforced by the
   database, so that an error such as a missed `WHERE` clause or an insecure direct object reference would not reach
   another user's rows. Whether and how the panel uses it is not decided here.
 - One database will mean one test matrix, one set of migration behaviours, and SQL written for it rather than for what
   two databases share.
-- Designs will build on PostgreSQL's features, such as `jsonb` with GIN indexes, advisory locks, `LISTEN`
-  and `NOTIFY`, `RETURNING`, `ON CONFLICT`, `FOR UPDATE SKIP LOCKED` and `NOWAIT`, partial and expression indexes,
-  generated columns, check constraints, and native full-text search.
-- Schema conventions will follow, each to be decided by the design that owns it, such as `timestamptz`
-  rather than naive datetimes, `jsonb` for schemaless options and metadata, `inet` and `cidr` for allocation addresses,
-  `RETURNING` in place of a second query after an insert, an indexed `server_id` on every table scoped to a server,
-  which row-level policies would need, check constraints and strict `NOT NULL` by default, and migrations run inside
-  transactions.
+- Designs will build on PostgreSQL's features, such as `jsonb` with GIN indexes, advisory locks, `LISTEN` and `NOTIFY`,
+  `RETURNING`, `ON CONFLICT`, `FOR UPDATE SKIP LOCKED` and `NOWAIT`, partial and expression indexes, generated columns,
+  check constraints, and native full-text search.
+- Schema conventions will follow, each to be decided by the design that owns it, such as `timestamptz` rather than
+  naive datetimes, `jsonb` for schemaless options and metadata, `inet` and `cidr` for allocation addresses, `RETURNING`
+  in place of a second query after an insert, an indexed `server_id` on every table scoped to a server, which row-level
+  policies would need, check constraints and strict `NOT NULL` by default, and migrations run inside transactions.
 
 Harder:
 
@@ -93,7 +92,7 @@ Harder:
   without the migrations being ordered. Where transactions begin and end in such a run is not decided here.
 - Installing PostgreSQL will be extra work for some people self-hosting, since it is less common than MySQL in game
   hosting and on budget hosts. Documentation and the installer will need to treat it as one more package beside the
-  panel's single binary, per [ADR-0009](0009-the-panel-runs-as-a-frankenphp-worker-in-a-single-binary.md).
+  panel's single binary, as [ADR-0009](0009-frankenphp-worker.md) describes it.
 - Importing from Pterodactyl will be a move of data from MySQL to PostgreSQL, and a feature in its own right.
 - The database component will have to be rewritten, since its syntax, types and schema building are MySQL's.
 

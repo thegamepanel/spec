@@ -4,7 +4,7 @@ title: Configuration objects
 status: accepted
 created: 2026-03-25
 decided: 2026-03-29
-backfilled: 2026-09-13
+backfilled: 2026-11-18
 depends: [ADR-0005, ADR-0006, RFC-0001]
 updates: []
 obsoletes: []
@@ -14,46 +14,29 @@ obsoletes: []
 
 ## Abstract
 
-A configuration component in which each configuration is an instance of a class unique to it, registered against a
-module and a name, held in an immutable catalogue and injected by its class. Environment variables are available
-during bootstrap through a static `Env` class, read from the process environment or from an env file, with typed
-accessors that cast their values.
+I will give the panel a configuration component in which each configuration is an object of a class unique to it,
+registered against a [module](../GLOSSARY.md#module) and a name, held in an immutable catalogue and injected by its
+class. [Environment variable](../GLOSSARY.md#environment-variable)s will be available during bootstrap through a static
+`Env` class, read from the process environment or from an env file, with typed accessors that cast their values.
 
 ## Motivation
 
-The panel needs a configuration system to configure the engine's components, and to provide additional
-configuration for modules.
+The panel needs a configuration system to configure the [engine](../GLOSSARY.md#engine)'s components, and to provide
+additional configuration for [module](../GLOSSARY.md#module)s.
 
 ## Proposal
 
-### Concepts
+### One class for each configuration
 
-| Term | Meaning |
-|---|---|
-| Configuration object | An instance of a class unique to one configuration, holding that configuration's values. |
-| Module | The owner a configuration is registered against. The engine's own configuration is registered against a module like any other. |
-| Configuration name | The name a configuration is registered under within its module. |
-| Configuration catalogue | The immutable collection of every configuration object, looked up by module and name, or by class. |
-| Environment variable | A value supplied through the process environment or an env file, read during bootstrap. |
+Each configuration will be a [configuration object](../GLOSSARY.md#configuration-object): an instance of a class unique
+to that configuration, as [ADR-0005](../adr/0005-typed-configuration.md) decides. Its values will be
+typed properties, and it may contain child objects, but the configuration itself will be contained within its class.
+Each configuration will be registered against a [module](../GLOSSARY.md#module) and a name, and its class will map to
+exactly one module and name. The engine's own configuration will be registered against a module like any other.
 
-### Components
-
-| Component | Responsibility |
-|---|---|
-| `ConfigObject` | Contract every configuration object implements. |
-| `ConfigCatalogue` | Immutable. Holds the configuration objects and looks them up by module and name, or by class. |
-| `Env` | Static. Holds the environment variables during bootstrap and reads them, with typed accessors. |
-| `ConfigException` | Marker contract implemented by every exception the component throws. |
-
-### Configuration objects
-
-Each configuration is an instance of a class unique to that configuration, per
-[ADR-0005](../adr/0005-configuration-is-held-in-typed-objects.md). Its values are typed properties, and it may
-contain child objects, but the configuration itself is contained within its class. Each configuration is registered
-against a module and a name, and its class maps to exactly one module and name.
-
-A configuration object implements `ConfigObject`, which requires `__set_state()`. PHP calls `__set_state()` when an
-object exported with `var_export()` is restored, so configuration objects can be written to a cache and read back.
+Every configuration object will implement `ConfigObject`, which requires `__set_state()`. PHP calls `__set_state()`
+when it restores an object exported with `var_export()`, so a configuration object can be written to a cache and read
+back from it.
 
 ```php
 final readonly class MailConfig implements ConfigObject
@@ -70,17 +53,17 @@ final readonly class MailConfig implements ConfigObject
 }
 ```
 
-### Catalogue
+### Finding a configuration
 
-`ConfigCatalogue` is immutable. It is constructed with every configuration object, keyed by module and then by name,
-and builds a map from each object's class to its module and name as it is constructed. Nothing collects
-registrations: the registry that seals into it arrives with [RFC-0004](0004-toml-configuration-loading.md).
+`ConfigCatalogue` will hold every [configuration object](../GLOSSARY.md#configuration-object) and will be immutable. It
+will be constructed with the objects keyed by [module](../GLOSSARY.md#module) and then by name, and will build a map
+from each object's class to its module and name as it is constructed. Nothing will collect registrations: the registry
+that seals into the catalogue arrives with [RFC-0004](0004-toml-configuration-loading.md).
 
-| Method | Effect |
-|---|---|
-| `get(string $module, string $config): ?ConfigObject` | Returns the configuration object registered under the module and name, or `null`. |
-| `has(string $module, string $config): bool` | Returns whether a configuration object is registered under the module and name. |
-| `for(string $class): ?ConfigObject` | Returns the configuration object of the given class, or `null`. |
+A configuration will be found in one of two ways. `get(string $module, string $config): ?ConfigObject` will return the
+object registered under a module and name, and `has()` will say whether there is one.
+`for(string $class): ?ConfigObject` will return the object of a given class. Both lookups will return `null` when there
+is nothing to find.
 
 ```php
 $mail = $catalogue->get('engine', 'mail');
@@ -89,10 +72,10 @@ $mail = $catalogue->for(MailConfig::class);
 
 ### Injection
 
-Because each configuration object has a class of its own, a component receives the configuration it needs by type.
-The config component binds every configuration object into the container as a shared instance under its own class
-name, so a parameter typed as a configuration class is resolved to that object through an ordinary binding, as
-described in [RFC-0001](0001-dependency-injection-container.md).
+Because each [configuration object](../GLOSSARY.md#configuration-object) has a class of its own, a component will
+receive the configuration it needs by its type. The configuration component will bind every configuration object into
+the container as a shared instance under its own class name, so that a parameter typed as a configuration class resolves
+to that object through an ordinary binding, as described in [RFC-0001](0001-dependency-injection-container.md).
 
 ```php
 public function __construct(
@@ -102,30 +85,26 @@ public function __construct(
 
 ### Environment variables
 
-`Env` holds environment variables for the length of bootstrap, per
-[ADR-0006](../adr/0006-environment-variables-are-only-read-during-bootstrap.md). It is a static singleton, initialised
-once, from one of two sources:
+`Env` will hold [environment variable](../GLOSSARY.md#environment-variable)s for the length of bootstrap, as
+[ADR-0006](../adr/0006-environment-at-bootstrap.md) decides. It will be a static singleton.
 
-| Method | Effect |
+At the start of bootstrap, `Env` will be initialised once, from one of two sources: the `$_ENV` superglobal, through
+`Env::createFromSuperglobal()`, or the `.env` file in a directory, through `Env::createFromFile(string $path)`. Values
+read from a file will be held by `Env` alone and never written into `$_ENV`. Initialising it a second time will throw.
+
+While configuration is built, values will be read from it, and reading before it has been initialised will throw.
+`get()` will return a variable's value, or a default when the variable is missing or `null`, and `has()` will say
+whether a variable is present, including when its value is `null`. Four typed accessors will read a value as a
+particular type. Each takes the key and an optional default of that type, which is `null` unless one is given. It
+returns the default when the variable is missing or `null`, so an accessor called without a default returns `null`, and
+it throws when the value cannot be cast:
+
+| Accessor | Casts |
 |---|---|
-| `Env::createFromSuperglobal()` | Initialises `Env` with the values in the `$_ENV` superglobal. |
-| `Env::createFromFile(string $path)` | Initialises `Env` with the values parsed from the `.env` file in the directory at the path. The file's values are held by `Env` alone and are not written into `$_ENV`. |
-| `Env::destroy()` | Removes the instance, and with it the values read from an env file. |
-
-Initialising `Env` a second time throws, and so does reading from it before it has been initialised. Once bootstrap
-is over, `Env` is destroyed and nothing reads environment variables directly.
-
-Values are read with these accessors. Each typed accessor returns the default when the variable is missing or
-`null`, and throws when the value cannot be cast to its type.
-
-| Accessor | Behaviour |
-|---|---|
-| `get(string $key, $default = null)` | Returns the value, or the default when the variable is missing or `null`. |
-| `has(string $key)` | Returns whether the variable is present, including when its value is `null`. |
-| `string(string $key, ?string $default = null)` | Casts a string, number or boolean to a string. |
-| `int(string $key, ?int $default = null)` | Casts an integer, numeric string or boolean to an integer. |
-| `float(string $key, ?float $default = null)` | Casts a float, numeric string or boolean to a float. |
-| `bool(string $key, ?bool $default = null)` | Casts a boolean or integer to a boolean. The strings `true`, `1` and `yes` are `true`, and `false`, `0` and `no` are `false`. Any other string throws. |
+| `string()` | A string, number or boolean. |
+| `int()` | An integer, numeric string or boolean. |
+| `float()` | A float, numeric string or boolean. |
+| `bool()` | A boolean or integer. The strings `true`, `1` and `yes` are `true`, and `false`, `0` and `no` are `false`. Any other string throws. |
 
 ```php
 Env::createFromFile('/path/to/directory');
@@ -136,30 +115,26 @@ $debug = Env::bool('APP_DEBUG', false);
 Env::destroy();
 ```
 
+Once bootstrap is over, `Env::destroy()` will remove the instance, and with it any values read from a file. Nothing will
+read environment variables directly after that.
+
 ### Errors
 
-Every exception implements `ConfigException`.
-
-| Exception | Thrown when |
-|---|---|
-| `EnvInitialisationException` | `Env` is read before it has been initialised, or initialised a second time. |
-| `InvalidEnvException` | A typed accessor's value cannot be cast to its type. |
+Every exception the component throws will implement `ConfigException`, a marker contract. Reading `Env` before it has
+been initialised, or initialising it a second time, will throw `EnvInitialisationException`. A typed accessor whose
+value cannot be cast to its type will throw `InvalidEnvException`.
 
 ### Out of scope
 
 - **Loading configuration.** Reading configuration files and building the catalogue from them belongs to bootstrap.
-- **Caching.** Writing configuration objects to a cache and restoring them from it belongs to whatever loads
-  configuration.
+- **Caching.** Writing [configuration object](../GLOSSARY.md#configuration-object)s to a cache and restoring them from
+  it belongs to whatever loads configuration.
 
 ## Alternatives considered
 
-The decisions this design rests on are recorded separately, with the alternatives each one rejected:
-
-- holding configuration in typed objects, in [ADR-0005](../adr/0005-configuration-is-held-in-typed-objects.md)
-- reading environment variables only during bootstrap, in
-  [ADR-0006](../adr/0006-environment-variables-are-only-read-during-bootstrap.md)
-
-No other alternatives were weighed.
+This design rests on [ADR-0005](../adr/0005-typed-configuration.md), which holds configuration in
+typed objects, and [ADR-0006](../adr/0006-environment-at-bootstrap.md), which reads
+[environment variable](../GLOSSARY.md#environment-variable)s only during bootstrap.
 
 ## Backwards compatibility
 
@@ -187,7 +162,7 @@ Nothing breaks. No configuration component exists before this change.
 - The catalogue being described as immutable rather than as the sealed half of a registry pattern: corrected on
   2026-09-16. PR [#25]'s commits show the class arrived as a configuration registry and was renamed to a catalogue,
   and neither a registry nor a seal exists at [180794a]. Both the registry and the pattern in
-  [ADR-0003](../adr/0003-mutable-registries-are-sealed-into-immutable-catalogues.md), decided on 2026-04-22,
+  [ADR-0003](../adr/0003-sealed-catalogues.md), decided on 2026-04-22,
   postdate this design.
 
 [#22]: https://github.com/thegamepanel/panel/issues/22

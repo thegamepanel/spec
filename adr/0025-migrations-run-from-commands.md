@@ -13,35 +13,35 @@ obsoletes: []
 
 ## Context
 
-A migration changes the schema, so whatever runs one needs credentials able to change it.
+A migration changes the schema, so whatever runs one needs credentials able to change the schema.
 
 The panel serves every request from long-running worker processes that boot once, per
-[ADR-0009](0009-the-panel-runs-as-a-frankenphp-worker-in-a-single-binary.md). New code reaches them only when they
-restart, so a migration applied while they serve meets code written for the schema as it was before.
+[ADR-0009](0009-frankenphp-worker.md). New code reaches a worker only when it
+restarts, so a migration applied while the workers serve meets code written for the schema as it was before.
 
-PostgreSQL runs schema changes inside transactions, as [ADR-0023](0023-postgresql-replaces-mysql-and-mariadb.md)
-records, but some statements cannot run inside one, such as creating an index concurrently, which lets a table keep
-taking writes while the index is built, or creating a database.
+PostgreSQL runs schema changes inside transactions, as [ADR-0023](0023-postgresql-replaces-mysql.md)
+records, but some statements cannot run inside one. Creating a database is one. Creating an index concurrently, which
+lets a table keep taking writes while the index is built, is another.
 
 ## Decision
 
-We will run migrations only from commands, never from the process that serves requests, so that only those commands hold
+I will run migrations only from commands, never from the process that serves requests, so that only those commands hold
 credentials able to change the schema. Every command that runs migrations will put the panel into
 [maintenance mode](../GLOSSARY.md#maintenance-mode), in which it refuses requests, run the migrations, restart the
 workers so that they load the new code, and then leave maintenance mode. A new binary will not serve while its
-migrations are pending. Because nothing is served while migrations run, a statement that cannot run inside a transaction
-will not be allowed in a migration.
+migrations are pending. Because nothing is served while migrations run, no migration will be allowed a statement that
+cannot run inside a transaction.
 
 ## Alternatives
 
-**Running migrations when the panel starts.** The panel would run any pending migrations itself as it boots, before
-serving. We rejected this because the process that serves every request would then hold credentials able to change the
-schema.
+**Running migrations when the panel starts.** The panel would run any pending migrations itself as it boots, before it
+serves anything. I rejected this because the process that serves every request would then hold credentials able to
+change the schema.
 
 **Migrating while the panel serves.** Migrations would run with the panel up, and each would have to suit both the code
 before it and the code after it, such as by adding a column in one release and removing the old one in a later release.
-We rejected this because it asks every [module](../GLOSSARY.md#module) author for a discipline the panel cannot check,
-while the worker model already interrupts service to load new code.
+I rejected this because it asks every [module](../GLOSSARY.md#module) author for a discipline the panel cannot check,
+when the worker model already interrupts service to load new code.
 
 ## Consequences
 

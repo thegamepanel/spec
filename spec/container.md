@@ -12,7 +12,7 @@ is invoked with its parameters supplied.
 `Engine\Container\Container` is constructed with a [resolver](../GLOSSARY.md#resolver)
 [catalogue](../GLOSSARY.md#catalogue) and a binding catalogue, and holds the [shared](../GLOSSARY.md#shared) instances
 it resolves. It exposes `resolve()` and `invoke()`, and its binding catalogue is readable. It does not implement PSR-11,
-per [ADR-0004](../adr/0004-the-container-does-not-implement-psr-11.md).
+per [ADR-0004](../adr/0004-no-psr-11.md).
 
 ```php
 $container = new Container($resolvers, $bindings);

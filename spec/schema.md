@@ -9,7 +9,7 @@ Schema changes are built as objects that produce their own SQL, alongside the [q
 executed through a [connection](../GLOSSARY.md#connection) like any other statement, per [Database](database.md). A
 [schema statement](../GLOSSARY.md#schema-statement) binds no values: every literal is written into the SQL.
 
-The DDL is MySQL's, per [ADR-0007](../adr/0007-mysql-and-mariadb-are-the-default-database.md).
+The DDL is MySQL's, per [ADR-0007](../adr/0007-mysql-and-mariadb.md).
 
 ## Statements
 

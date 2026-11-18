@@ -45,7 +45,7 @@ and validates none of the three. The operator in a `WHERE` clause is matched aga
 one throws. The operator in a join is not checked.
 
 Tracked by [#41], which describes the quoting and escaping but not the operator. The fix is the compiler in
-[ADR-0017](../adr/0017-sql-is-produced-by-a-compiler-not-by-the-query-objects.md), where every name becomes SQL
+[ADR-0017](../adr/0017-sql-compiler.md), where every name becomes SQL
 through one identifier object.
 
 **This is latent rather than live.** Nothing in the [engine](../GLOSSARY.md#engine) currently takes an identifier from a
@@ -69,15 +69,15 @@ literal in one is written this way. Tracked by [#41].
 | `Lazy`, `Liminal` and `NoResolution` on a parameter are handled as [resolvable attribute](../GLOSSARY.md#resolvable-attribute)s, not by the container. Each implements `Resolvable`, so a parameter carrying one is routed to the [resolver](../GLOSSARY.md#resolver) registered against that attribute's class, and throws `InvalidResolverException` when none is. Only `Ghost` has a resolver. | [RFC-0001](../rfc/0001-dependency-injection-container.md) | none |
 | A qualified instance is cached per [qualifier](../GLOSSARY.md#qualifier) value rather than per qualifier class. The cache compares the qualifier's class and then calls `equals()`. | [RFC-0001](../rfc/0001-dependency-injection-container.md) | none |
 | `BindingNotFoundException` is never thrown. It is not referenced anywhere outside its own definition. | [RFC-0001](../rfc/0001-dependency-injection-container.md) | none |
-| Neither `BindingRegistry` nor `ResolverRegistry` produces a catalogue. Catalogues are constructed from arrays, so there is no seam between a [registry](../GLOSSARY.md#registry) and its catalogue. | [ADR-0003](../adr/0003-mutable-registries-are-sealed-into-immutable-catalogues.md) | none |
+| Neither `BindingRegistry` nor `ResolverRegistry` produces a catalogue. Catalogues are constructed from arrays, so there is no seam between a [registry](../GLOSSARY.md#registry) and its catalogue. | [ADR-0003](../adr/0003-sealed-catalogues.md) | none |
 
 ## Configuration
 
 | What happens | Against | Issue |
 |---|---|---|
-| `Env::string()` returns the default for a value it cannot cast, where `int()`, `float()` and `bool()` throw. | [RFC-0004](../rfc/0004-toml-configuration-loading.md), [ADR-0006](../adr/0006-environment-variables-are-only-read-during-bootstrap.md) | none |
+| `Env::string()` returns the default for a value it cannot cast, where `int()`, `float()` and `bool()` throw. | [RFC-0004](../rfc/0004-toml-configuration-loading.md), [ADR-0006](../adr/0006-environment-at-bootstrap.md) | none |
 | Nothing binds [configuration object](../GLOSSARY.md#configuration-object)s into the container, so a configuration class cannot be resolved by type. | [RFC-0002](../rfc/0002-configuration-objects.md) | none |
-| Nothing confines `Env` to bootstrap. `destroy()` exists, but once initialised `Env` is readable from anywhere until `destroy()` is called. | [ADR-0006](../adr/0006-environment-variables-are-only-read-during-bootstrap.md) | none |
+| Nothing confines `Env` to bootstrap. `destroy()` exists, but once initialised `Env` is readable from anywhere until `destroy()` is called. | [ADR-0006](../adr/0006-environment-at-bootstrap.md) | none |
 | `MissingEnvVariableException` is never thrown. It is not referenced anywhere outside its own definition. | [RFC-0002](../rfc/0002-configuration-objects.md) | none |
 
 ## Database
@@ -118,10 +118,10 @@ These are not defects. Each is a decision this repository records that the code 
 
 | Decision | State of the code |
 |---|---|
-| [ADR-0016](../adr/0016-postgresql-16-is-the-only-supported-database.md), PostgreSQL 16 only | The driver is fixed to MySQL and the DSN builder handles no other. |
-| [ADR-0017](../adr/0017-sql-is-produced-by-a-compiler-not-by-the-query-objects.md), SQL from a compiler | Every query and schema object still produces its own SQL. |
-| [ADR-0014](../adr/0014-class-level-attributes-are-memoised-as-presence-flags.md), memoised class attributes | Each resolution reflects for the attributes again. |
-| [ADR-0021](../adr/0021-all-file-access-goes-through-flysystem.md), file access through Flysystem | Configuration loading reads through PHP's own functions. |
+| [ADR-0016](../adr/0016-postgresql-16.md), PostgreSQL 16 only | The driver is fixed to MySQL and the DSN builder handles no other. |
+| [ADR-0017](../adr/0017-sql-compiler.md), SQL from a compiler | Every query and schema object still produces its own SQL. |
+| [ADR-0014](../adr/0014-attribute-presence-flags.md), memoised class attributes | Each resolution reflects for the attributes again. |
+| [ADR-0021](../adr/0021-flysystem-only.md), file access through Flysystem | Configuration loading reads through PHP's own functions. |
 
 ## Sources
 

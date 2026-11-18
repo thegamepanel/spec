@@ -9,7 +9,7 @@ Each [query](../GLOSSARY.md#query) is built as an object that produces its own S
 knows nothing of the [connection](../GLOSSARY.md#connection) it runs against, and a connection accepts either a builder
 or a string, per [Database](database.md).
 
-The SQL is MySQL's, per [ADR-0007](../adr/0007-mysql-and-mariadb-are-the-default-database.md): `REPLACE INTO`,
+The SQL is MySQL's, per [ADR-0007](../adr/0007-mysql-and-mariadb.md): `REPLACE INTO`,
 `INSERT IGNORE`, `ON DUPLICATE KEY UPDATE` and `MATCH ... AGAINST` all appear in what it writes.
 
 ## Expressions
