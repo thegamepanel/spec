@@ -310,9 +310,10 @@ These will change for code that resolves through the container today:
   [instance cache](../GLOSSARY.md#instance-cache). A `Transient` lifetime selects no cache. Today the dependency holds a
   second object of the class, and the constructor runs on it when it is first accessed.
 - A parameter marked with `Ghost` that is also marked with a resolvable attribute will throw
-  `DependencyResolutionException`. A parameter marked with `Ghost` that is also marked with `Lazy`, `Liminal` or
-  `NoResolution` will follow the rules under Requesting a ghost resolution. Today the first of these attributes written
-  is taken as the parameter's resolvable attribute. `Lazy`, `Liminal` and `NoResolution` also implement `Resolvable`.
+  `DependencyResolutionException`. Today the first of the two attributes written is taken as the parameter's resolvable
+  attribute. A parameter marked with `Ghost` that is also marked with `Lazy`, `Liminal` or `NoResolution` will follow
+  the rules under Requesting a ghost resolution. Today `GhostResolver` gives it a ghost object, and the other attribute
+  has no effect.
 - `resolveWith()` will no longer accept `Ghost`, and `ghost()` will request a ghost resolution instead. Today
   `resolveWith()` accepts `Ghost`, and the container ignores it, as it ignores every attribute given to `resolveWith()`.
 
