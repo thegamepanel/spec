@@ -6,4 +6,4 @@ named_by: RFC-0001
 
 # Resolvable attribute
 
-A parameter attribute that selects a custom resolver for the dependency it is placed on, paired with that resolver in the resolver catalogue. `Ghost`, resolved by `GhostResolver`, is one.
+A parameter attribute that selects a custom resolver for the dependency it is placed on, paired with that resolver in the resolver catalogue. `Database`, resolved by `DatabaseResolver`, is an example.

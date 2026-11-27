@@ -136,7 +136,11 @@ A module installed as a Composer package of type `tgp-module` into the modules d
 
 ## Ghost object
 
-An object of the final class that the dependency injection container creates uninitialised. When it is first accessed, its constructor runs on that same object through the container, and from then on it is the instance itself rather than a stand-in for one. A dependency is resolved as a ghost object with the `Ghost` attribute.
+An object of the final class that the dependency injection container creates uninitialised. When it is first accessed, its constructor runs on that same object through the container. From then on it is the instance itself, not a stand-in for one. A dependency marked with the `Ghost` attribute receives a ghost object only where the container would construct the instance itself.
+
+## Ghost resolution
+
+A resolution that asks for a ghost object. It is made for a dependency marked with `Ghost`, or requested through `ghost()`. Where nothing is cached for it, and the container would construct the instance itself, a ghost object is created before its constructor runs. A ghost resolution of a binding that holds an instance or a factory is resolved as every other resolution is. So is a ghost resolution of a class with no properties that could trigger initialisation.
 
 ## Given filesystem
 
@@ -157,6 +161,10 @@ Calling a callable, method or constructor with its parameters supplied by the de
 ## Lazy proxy
 
 A stand-in that the dependency injection container returns in place of an instance not yet resolved. When the proxy is first used, the container resolves the real instance, and the proxy forwards to it from then on, remaining a proxy.
+
+## Lazy resolution
+
+A resolution that asks for a lazy proxy, or whose binding or class is lazy. Where the resolution reaches the lazy proxy step, it is given a lazy proxy in place of the instance. For a class with no properties that could trigger initialisation, no lazy proxy is created and the instance is resolved eagerly instead.
 
 ## Ledger
 
@@ -276,7 +284,7 @@ A path beneath a root, joined onto it by `Paths`. The root's trailing separator 
 
 ## Resolution
 
-Producing an instance of a class through the dependency injection container, from a binding or automatically from its constructor. Also the object that describes such a request, holding details such as the class, any constructor arguments, a name or qualifier, and whether the result is lazy or liminal.
+Producing an instance of a class through the dependency injection container, from a binding or automatically from its constructor. It is also the object that describes such a request. The object holds details such as the class, any constructor arguments and a name or qualifier. It also records whether the resolution asks for a lazy proxy or a ghost object, or to be liminal.
 
 ## Resolution stack
 
@@ -284,7 +292,7 @@ The resolutions the dependency injection container is constructing eagerly, in t
 
 ## Resolvable attribute
 
-A parameter attribute that selects a custom resolver for the dependency it is placed on, paired with that resolver in the resolver catalogue. `Ghost`, resolved by `GhostResolver`, is one.
+A parameter attribute that selects a custom resolver for the dependency it is placed on, paired with that resolver in the resolver catalogue. `Database`, resolved by `DatabaseResolver`, is an example.
 
 ## Resolver
 
